@@ -1,0 +1,915 @@
+{
+  "name": "Instagram(投稿フロー)",
+  "nodes": [
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v19.0/17841479987775736/media_publish",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "creation_id",
+              "value": "={{$node[\"IG - Create media (/media)\"].json[\"id\"]}}"
+            },
+            {
+              "name": "access_token",
+              "value": "EAAXnC0X5UmEBQhJPZCR86dK4DAi0Gb9CijZBHYDInRtiN3Eao0CjHSWHpu8KaswIIpepDZBXf8afuzu6ZBV0YD6JWO8SRb5rrjdUZC5tH5Uy2Pphy8wox3uCE3DA1MwRiQkhbKnSyhMkxjGOlVu1AQBZC83dwAWYAQtf0e3roZBPk7m1Oay9zchk8i84MFmrMChlgCC"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        64,
+        -592
+      ],
+      "id": "68dbbc4b-8405-4d53-adf1-74ec2da511ed",
+      "name": "IG - Publish (/media_publish)"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -1168,
+        -832
+      ],
+      "id": "21fdde85-f86c-47e8-8d8d-627217aea3d8",
+      "name": "Trigger - Manual"
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "documentId": {
+          "__rl": true,
+          "value": "https://docs.google.com/spreadsheets/d/1hCW2UxNyukO9yxUURLnDn5A0hiY4rcDwzZ-r8h17NHc/edit?gid=1737108624#gid=1737108624",
+          "mode": "url"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Instagram",
+          "mode": "name"
+        },
+        "options": {
+          "dataLocationOnSheet": {
+            "values": {
+              "rangeDefinition": "specifyRange",
+              "headerRow": 3,
+              "firstDataRow": 5
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -944,
+        -832
+      ],
+      "id": "88d56de8-bc32-4916-8d9b-9334bae158bf",
+      "name": "Sheet - Get rows (Instagram)",
+      "credentials": {
+        "googleApi": {
+          "id": "9lG3yf7tgXo8xxjp",
+          "name": "Google Sheets account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v19.0/17841479987775736/media",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "image_url",
+              "value": "={{ $node[\"Limit\"].json[\"source_url\"] }}"
+            },
+            {
+              "name": "caption",
+              "value": "={{ $node[\"Limit\"].json[\"ig_caption_short\"] }}\n\n{{ $node[\"Limit\"].json[\"ig_hashtags\"] }}"
+            },
+            {
+              "name": "access_token",
+              "value": "EAAXnC0X5UmEBQhJPZCR86dK4DAi0Gb9CijZBHYDInRtiN3Eao0CjHSWHpu8KaswIIpepDZBXf8afuzu6ZBV0YD6JWO8SRb5rrjdUZC5tH5Uy2Pphy8wox3uCE3DA1MwRiQkhbKnSyhMkxjGOlVu1AQBZC83dwAWYAQtf0e3roZBPk7m1Oay9zchk8i84MFmrMChlgCC"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -288,
+        -592
+      ],
+      "id": "5b05d585-8caa-4b22-bc9c-79394fdb229c",
+      "name": "IG - Create media (/media)"
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "1hCW2UxNyukO9yxUURLnDn5A0hiY4rcDwzZ-r8h17NHc",
+          "mode": "list",
+          "cachedResultName": "X連携用",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1hCW2UxNyukO9yxUURLnDn5A0hiY4rcDwzZ-r8h17NHc/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1737108624,
+          "mode": "list",
+          "cachedResultName": "Instagram",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1hCW2UxNyukO9yxUURLnDn5A0hiY4rcDwzZ-r8h17NHc/edit#gid=1737108624"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "row_number": "={{ $node[\"Limit\"].json[\"row_number\"] }}",
+            "updated_at": "={{$now.toFormat('yyyy-MM-dd-HH:mm')}}",
+            "ig_container_id": "={{ $node[\"IG - Create media (/media)\"].json[\"id\"] }}"
+          },
+          "matchingColumns": [
+            "row_number"
+          ],
+          "schema": [
+            {
+              "id": "ig_caption",
+              "displayName": "ig_caption",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "ig_hashtags",
+              "displayName": "ig_hashtags",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "image_url",
+              "displayName": "image_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "posted_at",
+              "displayName": "posted_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "processing_status",
+              "displayName": "processing_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "ig_container_id",
+              "displayName": "ig_container_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "ig_media_id",
+              "displayName": "ig_media_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "error_message",
+              "displayName": "error_message",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "updated_at",
+              "displayName": "updated_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "source_url",
+              "displayName": "source_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "r2_object_key",
+              "displayName": "r2_object_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "cellFormat": "USER_ENTERED",
+          "locationDefine": {
+            "values": {
+              "headerRow": 3,
+              "firstDataRow": 5
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -112,
+        -592
+      ],
+      "id": "87df3832-d1c1-45fb-8d6d-237a97cd8342",
+      "name": "Sheet - Update container_id",
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleApi": {
+          "id": "9lG3yf7tgXo8xxjp",
+          "name": "Google Sheets account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "1hCW2UxNyukO9yxUURLnDn5A0hiY4rcDwzZ-r8h17NHc",
+          "mode": "list",
+          "cachedResultName": "X連携用",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1hCW2UxNyukO9yxUURLnDn5A0hiY4rcDwzZ-r8h17NHc/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1737108624,
+          "mode": "list",
+          "cachedResultName": "Instagram",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1hCW2UxNyukO9yxUURLnDn5A0hiY4rcDwzZ-r8h17NHc/edit#gid=1737108624"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "row_number": "={{ $node[\"Limit\"].json[\"row_number\"] }}",
+            "status": "=posted",
+            "processing_status": "=done",
+            "posted_at": "={{$now.setZone('Asia/Tokyo').toFormat('yyyy-MM-dd-HH:mm')}}",
+            "ig_media_id": "={{ $node[\"IG - Publish (/media_publish)\"].json[\"id\"] }}",
+            "updated_at": "={{$now.setZone('Asia/Tokyo').toFormat('yyyy-MM-dd-HH:mm')}}"
+          },
+          "matchingColumns": [
+            "row_number"
+          ],
+          "schema": [
+            {
+              "id": "ig_caption",
+              "displayName": "ig_caption",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "ig_hashtags",
+              "displayName": "ig_hashtags",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "image_url",
+              "displayName": "image_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "posted_at",
+              "displayName": "posted_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "processing_status",
+              "displayName": "processing_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "ig_container_id",
+              "displayName": "ig_container_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "ig_media_id",
+              "displayName": "ig_media_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "error_message",
+              "displayName": "error_message",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "updated_at",
+              "displayName": "updated_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "source_url",
+              "displayName": "source_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "r2_object_key",
+              "displayName": "r2_object_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "locationDefine": {
+            "values": {
+              "headerRow": 3,
+              "firstDataRow": 5
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        208,
+        -592
+      ],
+      "id": "abc69326-da4f-4b88-8311-c0cd178e9f42",
+      "name": "Sheet - Update published",
+      "credentials": {
+        "googleApi": {
+          "id": "9lG3yf7tgXo8xxjp",
+          "name": "Google Sheets account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "c5615fa0-cb5d-47a3-b771-1f29083b94ab",
+              "leftValue": "={{$json.status}}",
+              "rightValue": "ready",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "9d7b8342-0398-4513-9a8d-7d9c16f0025f",
+              "leftValue": "={{$json.processing_status}}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            },
+            {
+              "id": "4fa1b87c-256d-430d-b870-d5b682849cc4",
+              "leftValue": "",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -1040,
+        -592
+      ],
+      "id": "36525de5-b071-4a6e-a7c8-2c97418cd9ca",
+      "name": "Filter - ready"
+    },
+    {
+      "parameters": {
+        "sortFieldsUi": {
+          "sortField": [
+            {
+              "fieldName": "row_number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.sort",
+      "typeVersion": 1,
+      "position": [
+        -816,
+        -592
+      ],
+      "id": "a1d174c9-3b47-4a51-b268-4819bb2f9edf",
+      "name": "Sort"
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "1hCW2UxNyukO9yxUURLnDn5A0hiY4rcDwzZ-r8h17NHc",
+          "mode": "list",
+          "cachedResultName": "X連携用",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1hCW2UxNyukO9yxUURLnDn5A0hiY4rcDwzZ-r8h17NHc/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1737108624,
+          "mode": "list",
+          "cachedResultName": "Instagram",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1hCW2UxNyukO9yxUURLnDn5A0hiY4rcDwzZ-r8h17NHc/edit#gid=1737108624"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "row_number": "={{ $json.row_number }}",
+            "processing_status": "=processing",
+            "updated_at": "={{$now.toFormat('yyyy-MM-dd-HH:mm')}}"
+          },
+          "matchingColumns": [
+            "row_number"
+          ],
+          "schema": [
+            {
+              "id": "column_id",
+              "displayName": "column_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "seq_no",
+              "displayName": "seq_no",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "ig_caption",
+              "displayName": "ig_caption",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "ig_hashtags",
+              "displayName": "ig_hashtags",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "image_url",
+              "displayName": "image_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "posted_at",
+              "displayName": "posted_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "processing_status",
+              "displayName": "processing_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "ig_container_id",
+              "displayName": "ig_container_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "ig_media_id",
+              "displayName": "ig_media_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "error_message",
+              "displayName": "error_message",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "updated_at",
+              "displayName": "updated_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "source_url",
+              "displayName": "source_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "r2_object_key",
+              "displayName": "r2_object_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "locationDefine": {
+            "values": {
+              "headerRow": 3,
+              "firstDataRow": 5
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -496,
+        -592
+      ],
+      "id": "bf7ca3c9-2426-48ee-8a23-1a5f5f85cb2c",
+      "name": "Update row in sheet",
+      "credentials": {
+        "googleApi": {
+          "id": "9lG3yf7tgXo8xxjp",
+          "name": "Google Sheets account 2"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.limit",
+      "typeVersion": 1,
+      "position": [
+        -672,
+        -592
+      ],
+      "id": "5076b7c5-5a00-4de9-bc43-271e9500242a",
+      "name": "Limit"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Trigger - Manual": {
+      "main": [
+        [
+          {
+            "node": "Sheet - Get rows (Instagram)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sheet - Get rows (Instagram)": {
+      "main": [
+        [
+          {
+            "node": "Filter - ready",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IG - Create media (/media)": {
+      "main": [
+        [
+          {
+            "node": "Sheet - Update container_id",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sheet - Update container_id": {
+      "main": [
+        [
+          {
+            "node": "IG - Publish (/media_publish)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IG - Publish (/media_publish)": {
+      "main": [
+        [
+          {
+            "node": "Sheet - Update published",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter - ready": {
+      "main": [
+        [
+          {
+            "node": "Sort",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sort": {
+      "main": [
+        [
+          {
+            "node": "Limit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update row in sheet": {
+      "main": [
+        [
+          {
+            "node": "IG - Create media (/media)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Limit": {
+      "main": [
+        [
+          {
+            "node": "Update row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false,
+    "timeSavedMode": "fixed",
+    "timezone": "Asia/Tokyo",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "a51a2af3-4333-4a8e-89d1-c5a81f8e1851",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "762f82b201b28ae77bf5a217ccac492016d914bb05a2c5d34759cfa891c4fdca"
+  },
+  "id": "pW02Q9g4_Bj7vzbjZZQlK",
+  "tags": []
+}
