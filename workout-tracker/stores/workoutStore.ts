@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { DailyWorkout, Exercise, ExerciseType, TimerSettings, WorkoutSet } from '@/types/workout';
+import { DailyWorkout, Exercise, ExerciseType, TimerSettings, isDurationBasedExercise, EXERCISE_NAMES } from '@/types/workout';
 
 const generateId = () => Math.random().toString(36).substring(2, 9);
 
@@ -20,8 +20,12 @@ interface WorkoutState {
   addSet: (exerciseId: string) => void;
   removeSet: (exerciseId: string, setIndex: number) => void;
   updateSetReps: (exerciseId: string, setIndex: number, reps: number) => void;
+  updateSetVariation: (exerciseId: string, setIndex: number, variation: string) => void;
+  updateSetTempo: (exerciseId: string, setIndex: number, tempo: string) => void;
+  toggleSetAssistance: (exerciseId: string, setIndex: number) => void;
   toggleSetCompleted: (exerciseId: string, setIndex: number) => void;
   updateCardioDuration: (exerciseId: string, duration: number) => void;
+  updateDurationMinutes: (exerciseId: string, minutes: number) => void;
   updateTimerSettings: (settings: Partial<TimerSettings>) => void;
   getTodayWorkout: () => DailyWorkout | undefined;
   getWorkoutByDate: (date: string) => DailyWorkout | undefined;
@@ -40,19 +44,14 @@ export const useWorkoutStore = create<WorkoutState>()(
 
       addExercise: (type: ExerciseType) => {
         const today = getTodayDate();
-        const exerciseNames: Record<ExerciseType, string> = {
-          pushup: '腕立て伏せ',
-          squat: 'スクワット',
-          pullup: '懸垂',
-          cardio: '有酸素運動',
-        };
 
         const newExercise: Exercise = {
           id: generateId(),
           type,
-          name: exerciseNames[type],
-          sets: type === 'cardio' ? [] : [{ reps: 0, completed: false }],
-          duration: type === 'cardio' ? 0 : undefined,
+          name: EXERCISE_NAMES[type],
+          sets: isDurationBasedExercise(type) ? [] : [{ reps: 0, completed: false }],
+          duration: isDurationBasedExercise(type) ? 0 : undefined,
+          durationMinutes: undefined,
           createdAt: new Date().toISOString(),
         };
 
@@ -148,6 +147,75 @@ export const useWorkoutStore = create<WorkoutState>()(
         }));
       },
 
+      updateSetVariation: (exerciseId: string, setIndex: number, variation: string) => {
+        const today = getTodayDate();
+        set((state) => ({
+          workouts: state.workouts.map((w) =>
+            w.date === today
+              ? {
+                  ...w,
+                  exercises: w.exercises.map((e) =>
+                    e.id === exerciseId
+                      ? {
+                          ...e,
+                          sets: e.sets.map((s, i) =>
+                            i === setIndex ? { ...s, variation } : s
+                          ),
+                        }
+                      : e
+                  ),
+                }
+              : w
+          ),
+        }));
+      },
+
+      updateSetTempo: (exerciseId: string, setIndex: number, tempo: string) => {
+        const today = getTodayDate();
+        set((state) => ({
+          workouts: state.workouts.map((w) =>
+            w.date === today
+              ? {
+                  ...w,
+                  exercises: w.exercises.map((e) =>
+                    e.id === exerciseId
+                      ? {
+                          ...e,
+                          sets: e.sets.map((s, i) =>
+                            i === setIndex ? { ...s, tempo } : s
+                          ),
+                        }
+                      : e
+                  ),
+                }
+              : w
+          ),
+        }));
+      },
+
+      toggleSetAssistance: (exerciseId: string, setIndex: number) => {
+        const today = getTodayDate();
+        set((state) => ({
+          workouts: state.workouts.map((w) =>
+            w.date === today
+              ? {
+                  ...w,
+                  exercises: w.exercises.map((e) =>
+                    e.id === exerciseId
+                      ? {
+                          ...e,
+                          sets: e.sets.map((s, i) =>
+                            i === setIndex ? { ...s, assistance: !s.assistance } : s
+                          ),
+                        }
+                      : e
+                  ),
+                }
+              : w
+          ),
+        }));
+      },
+
       toggleSetCompleted: (exerciseId: string, setIndex: number) => {
         const today = getTodayDate();
         set((state) => ({
@@ -179,7 +247,35 @@ export const useWorkoutStore = create<WorkoutState>()(
               ? {
                   ...w,
                   exercises: w.exercises.map((e) =>
-                    e.id === exerciseId ? { ...e, duration } : e
+                    e.id === exerciseId
+                      ? {
+                          ...e,
+                          duration,
+                          durationMinutes: duration % 60 === 0 ? duration / 60 : e.durationMinutes,
+                        }
+                      : e
+                  ),
+                }
+              : w
+          ),
+        }));
+      },
+
+      updateDurationMinutes: (exerciseId: string, minutes: number) => {
+        const today = getTodayDate();
+        set((state) => ({
+          workouts: state.workouts.map((w) =>
+            w.date === today
+              ? {
+                  ...w,
+                  exercises: w.exercises.map((e) =>
+                    e.id === exerciseId
+                      ? {
+                          ...e,
+                          durationMinutes: minutes,
+                          duration: minutes * 60,
+                        }
+                      : e
                   ),
                 }
               : w

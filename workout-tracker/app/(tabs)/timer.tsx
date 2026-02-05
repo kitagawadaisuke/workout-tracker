@@ -16,7 +16,7 @@ export default function TimerScreen() {
 
   // Metronome State
   const [bpm, setBpm] = useState(timerSettings.metronomeBpm);
-  const [beats, setBeats] = useState<3 | 4>(timerSettings.metronomeBeats);
+  const [beats, setBeats] = useState<3 | 4 | 8>(timerSettings.metronomeBeats);
   const [isMetronomeRunning, setIsMetronomeRunning] = useState(false);
   const [currentBeat, setCurrentBeat] = useState(0);
   const metronomeRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -112,8 +112,8 @@ export default function TimerScreen() {
     updateTimerSettings({ metronomeBpm: newBpm });
   };
 
-  const toggleBeats = () => {
-    const newBeats = beats === 3 ? 4 : 3;
+  const cycleBeats = () => {
+    const newBeats: 3 | 4 | 8 = beats === 3 ? 4 : beats === 4 ? 8 : 3;
     setBeats(newBeats);
     updateTimerSettings({ metronomeBeats: newBeats });
   };
@@ -231,7 +231,7 @@ export default function TimerScreen() {
 
           <Button
             mode="outlined"
-            onPress={toggleBeats}
+            onPress={cycleBeats}
             style={styles.beatsButton}
           >
             {beats}拍子

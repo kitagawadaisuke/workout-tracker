@@ -1,4 +1,4 @@
-import * as FileSystem from 'expo-file-system';
+import { File, Paths } from 'expo-file-system/next';
 import * as Sharing from 'expo-sharing';
 import { DailyWorkout } from '@/types/workout';
 
@@ -42,15 +42,13 @@ export const exportToJson = async (workouts: DailyWorkout[]): Promise<boolean> =
     const exportData = generateExportData(workouts);
     const jsonString = JSON.stringify(exportData, null, 2);
     const fileName = `workout-data-${new Date().toISOString().split('T')[0]}.json`;
-    const filePath = `${FileSystem.documentDirectory}${fileName}`;
+    const file = new File(Paths.cache, fileName);
 
-    await FileSystem.writeAsStringAsync(filePath, jsonString, {
-      encoding: FileSystem.EncodingType.UTF8,
-    });
+    await file.write(jsonString);
 
     const canShare = await Sharing.isAvailableAsync();
     if (canShare) {
-      await Sharing.shareAsync(filePath, {
+      await Sharing.shareAsync(file.uri, {
         mimeType: 'application/json',
         dialogTitle: 'トレーニングデータをエクスポート',
       });

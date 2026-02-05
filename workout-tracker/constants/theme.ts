@@ -26,6 +26,9 @@ export const colors = {
   squat: '#22c55e',     // green
   pullup: '#f59e0b',    // amber
   cardio: '#ec4899',    // pink
+  bodypump: '#a855f7',  // purple
+  bodycombat: '#ef4444', // red
+  leapfight: '#14b8a6', // teal
   strength: '#6366f1',  // indigo (combined strength)
   both: '#a855f7',      // purple (both types)
 };

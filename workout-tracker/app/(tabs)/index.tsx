@@ -1,43 +1,43 @@
 import React, { useState } from 'react';
 import { View, ScrollView, StyleSheet } from 'react-native';
-import { Text, Card, Button, IconButton, TextInput, Chip, Portal, Dialog } from 'react-native-paper';
+import { Text, Card, Button, IconButton, TextInput, Chip, Portal, Dialog, SegmentedButtons } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useWorkoutStore } from '@/stores/workoutStore';
 import { darkTheme, colors } from '@/constants/theme';
-import { ExerciseType, EXERCISE_NAMES } from '@/types/workout';
+import { ExerciseType, EXERCISE_NAMES, EXERCISE_ICONS, isDurationBasedExercise, DURATION_PRESETS } from '@/types/workout';
 
 export default function HomeScreen() {
   const [dialogVisible, setDialogVisible] = useState(false);
-  const { getTodayWorkout, addExercise, removeExercise, addSet, removeSet, updateSetReps, toggleSetCompleted, updateCardioDuration } = useWorkoutStore();
+  const {
+    getTodayWorkout,
+    addExercise,
+    removeExercise,
+    addSet,
+    removeSet,
+    updateSetReps,
+    updateSetVariation,
+    updateSetTempo,
+    toggleSetAssistance,
+    toggleSetCompleted,
+    updateDurationMinutes,
+  } = useWorkoutStore();
 
   const todayWorkout = getTodayWorkout();
   const exercises = todayWorkout?.exercises || [];
 
-  const exerciseTypes: ExerciseType[] = ['pushup', 'squat', 'pullup', 'cardio'];
+  const exerciseTypes: ExerciseType[] = ['pushup', 'squat', 'pullup', 'cardio', 'bodypump', 'bodycombat', 'leapfight'];
 
   const handleAddExercise = (type: ExerciseType) => {
     addExercise(type);
     setDialogVisible(false);
   };
 
-  const formatDuration = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
-
-  const parseDuration = (text: string): number => {
-    const parts = text.split(':');
-    if (parts.length === 2) {
-      const mins = parseInt(parts[0], 10) || 0;
-      const secs = parseInt(parts[1], 10) || 0;
-      return mins * 60 + secs;
-    }
-    return parseInt(text, 10) || 0;
-  };
-
   const getExerciseColor = (type: ExerciseType) => {
     return colors[type] || colors.strength;
+  };
+
+  const getExerciseIcon = (type: ExerciseType): string => {
+    return EXERCISE_ICONS[type] || 'dumbbell';
   };
 
   const today = new Date().toLocaleDateString('ja-JP', {
@@ -65,14 +65,14 @@ export default function HomeScreen() {
               <Card.Title
                 title={exercise.name}
                 titleStyle={styles.exerciseTitle}
-                left={(props) => (
+                left={() => (
                   <MaterialCommunityIcons
-                    name={exercise.type === 'cardio' ? 'run' : 'arm-flex'}
+                    name={getExerciseIcon(exercise.type) as any}
                     size={24}
                     color={getExerciseColor(exercise.type)}
                   />
                 )}
-                right={(props) => (
+                right={() => (
                   <IconButton
                     icon="delete-outline"
                     iconColor={darkTheme.colors.error}
@@ -81,48 +81,105 @@ export default function HomeScreen() {
                 )}
               />
               <Card.Content>
-                {exercise.type === 'cardio' ? (
-                  <View style={styles.cardioInput}>
-                    <Text style={styles.setLabel}>運動時間</Text>
-                    <TextInput
-                      mode="outlined"
-                      value={formatDuration(exercise.duration || 0)}
-                      onChangeText={(text) => updateCardioDuration(exercise.id, parseDuration(text))}
-                      placeholder="0:00"
-                      keyboardType="numbers-and-punctuation"
-                      style={styles.durationInput}
-                      outlineColor={darkTheme.colors.outline}
-                      activeOutlineColor={getExerciseColor(exercise.type)}
-                    />
-                    <Text style={styles.unitText}>分:秒</Text>
+                {isDurationBasedExercise(exercise.type) ? (
+                  <View>
+                    <Text style={styles.setLabel}>時間を選択</Text>
+                    <View style={styles.durationButtons}>
+                      {DURATION_PRESETS.map((mins) => (
+                        <Chip
+                          key={mins}
+                          mode={exercise.durationMinutes === mins ? 'flat' : 'outlined'}
+                          selected={exercise.durationMinutes === mins}
+                          onPress={() => updateDurationMinutes(exercise.id, mins)}
+                          style={[
+                            styles.durationChip,
+                            exercise.durationMinutes === mins && { backgroundColor: getExerciseColor(exercise.type) }
+                          ]}
+                          textStyle={exercise.durationMinutes === mins ? { color: '#fff' } : { color: darkTheme.colors.onSurface }}
+                        >
+                          {mins}分
+                        </Chip>
+                      ))}
+                    </View>
                   </View>
                 ) : (
                   <>
                     {exercise.sets.map((set, index) => (
-                      <View key={index} style={styles.setRow}>
-                        <Text style={styles.setLabel}>セット {index + 1}</Text>
-                        <TextInput
-                          mode="outlined"
-                          value={set.reps > 0 ? set.reps.toString() : ''}
-                          onChangeText={(text) => updateSetReps(exercise.id, index, parseInt(text, 10) || 0)}
-                          placeholder="0"
-                          keyboardType="number-pad"
-                          style={styles.repsInput}
-                          outlineColor={darkTheme.colors.outline}
-                          activeOutlineColor={getExerciseColor(exercise.type)}
-                        />
-                        <Text style={styles.unitText}>回</Text>
-                        <IconButton
-                          icon={set.completed ? 'check-circle' : 'circle-outline'}
-                          iconColor={set.completed ? '#22c55e' : darkTheme.colors.onSurfaceVariant}
-                          onPress={() => toggleSetCompleted(exercise.id, index)}
-                        />
-                        <IconButton
-                          icon="close"
-                          iconColor={darkTheme.colors.error}
-                          size={20}
-                          onPress={() => removeSet(exercise.id, index)}
-                        />
+                      <View key={index} style={styles.setContainer}>
+                        <View style={styles.setHeader}>
+                          <Text style={styles.setLabel}>セット {index + 1}</Text>
+                          <View style={styles.setActions}>
+                            <IconButton
+                              icon={set.completed ? 'check-circle' : 'circle-outline'}
+                              iconColor={set.completed ? '#22c55e' : darkTheme.colors.onSurfaceVariant}
+                              size={20}
+                              onPress={() => toggleSetCompleted(exercise.id, index)}
+                            />
+                            <IconButton
+                              icon="close"
+                              iconColor={darkTheme.colors.error}
+                              size={18}
+                              onPress={() => removeSet(exercise.id, index)}
+                            />
+                          </View>
+                        </View>
+
+                        <View style={styles.setRow}>
+                          <TextInput
+                            mode="outlined"
+                            label="回数"
+                            value={set.reps > 0 ? set.reps.toString() : ''}
+                            onChangeText={(text) => updateSetReps(exercise.id, index, parseInt(text, 10) || 0)}
+                            placeholder="0"
+                            keyboardType="number-pad"
+                            style={styles.repsInput}
+                            outlineColor={darkTheme.colors.outline}
+                            activeOutlineColor={getExerciseColor(exercise.type)}
+                            dense
+                          />
+
+                          <TextInput
+                            mode="outlined"
+                            label="バリエーション"
+                            value={set.variation || ''}
+                            onChangeText={(text) => updateSetVariation(exercise.id, index, text)}
+                            placeholder="例: ナロー"
+                            style={styles.variationInput}
+                            outlineColor={darkTheme.colors.outline}
+                            activeOutlineColor={getExerciseColor(exercise.type)}
+                            dense
+                          />
+                        </View>
+
+                        <View style={styles.setRow}>
+                          <TextInput
+                            mode="outlined"
+                            label="テンポ"
+                            value={set.tempo || ''}
+                            onChangeText={(text) => updateSetTempo(exercise.id, index, text)}
+                            placeholder="例: 2-1-2"
+                            style={styles.tempoInput}
+                            outlineColor={darkTheme.colors.outline}
+                            activeOutlineColor={getExerciseColor(exercise.type)}
+                            dense
+                          />
+
+                          {exercise.type === 'pullup' && (
+                            <Chip
+                              mode={set.assistance ? 'flat' : 'outlined'}
+                              selected={set.assistance}
+                              onPress={() => toggleSetAssistance(exercise.id, index)}
+                              style={[
+                                styles.assistanceChip,
+                                set.assistance && { backgroundColor: getExerciseColor(exercise.type) }
+                              ]}
+                              textStyle={set.assistance ? { color: '#fff' } : { color: darkTheme.colors.onSurface }}
+                              icon={set.assistance ? 'check' : 'hand-back-left'}
+                            >
+                              補助あり
+                            </Chip>
+                          )}
+                        </View>
                       </View>
                     ))}
                     <Button
@@ -165,7 +222,7 @@ export default function HomeScreen() {
                   textStyle={{ color: getExerciseColor(type) }}
                   icon={() => (
                     <MaterialCommunityIcons
-                      name={type === 'cardio' ? 'run' : type === 'pullup' ? 'human-handsup' : type === 'squat' ? 'human' : 'arm-flex'}
+                      name={getExerciseIcon(type) as any}
                       size={18}
                       color={getExerciseColor(type)}
                     />
@@ -224,33 +281,57 @@ const styles = StyleSheet.create({
     color: darkTheme.colors.onSurface,
     fontWeight: '600',
   },
+  setContainer: {
+    marginBottom: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: darkTheme.colors.outline,
+  },
+  setHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  setActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   setRow: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 8,
+    gap: 8,
   },
   setLabel: {
     color: darkTheme.colors.onSurfaceVariant,
-    width: 70,
+    fontWeight: '500',
   },
   repsInput: {
     width: 80,
     height: 40,
     backgroundColor: darkTheme.colors.surfaceVariant,
   },
-  durationInput: {
+  variationInput: {
+    flex: 1,
+    height: 40,
+    backgroundColor: darkTheme.colors.surfaceVariant,
+  },
+  tempoInput: {
     width: 100,
     height: 40,
     backgroundColor: darkTheme.colors.surfaceVariant,
   },
-  unitText: {
-    color: darkTheme.colors.onSurfaceVariant,
+  assistanceChip: {
     marginLeft: 8,
-    marginRight: 8,
   },
-  cardioInput: {
+  durationButtons: {
     flexDirection: 'row',
-    alignItems: 'center',
+    gap: 8,
+    marginTop: 8,
+  },
+  durationChip: {
+    marginRight: 4,
   },
   addButton: {
     position: 'absolute',
