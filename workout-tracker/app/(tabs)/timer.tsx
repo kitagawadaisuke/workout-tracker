@@ -1,8 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { View, StyleSheet, Vibration } from 'react-native';
-import { Text, Button, SegmentedButtons, Card, IconButton } from 'react-native-paper';
+import { Text, Button, SegmentedButtons, Card, IconButton, TextInput } from 'react-native-paper';
+import { Audio } from 'expo-av';
 import { useWorkoutStore } from '@/stores/workoutStore';
 import { darkTheme } from '@/constants/theme';
+import { FeedbackMode } from '@/types/workout';
 
 export default function TimerScreen() {
   const { timerSettings, updateTimerSettings } = useWorkoutStore();
@@ -13,22 +15,108 @@ export default function TimerScreen() {
   const [isRunning, setIsRunning] = useState(false);
   const [remainingTime, setRemainingTime] = useState(timerSettings.intervalSeconds);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [customMinutes, setCustomMinutes] = useState('');
+  const [customSeconds, setCustomSeconds] = useState('');
 
   // Metronome State
   const [bpm, setBpm] = useState(timerSettings.metronomeBpm);
-  const [beats, setBeats] = useState<3 | 4 | 8>(timerSettings.metronomeBeats);
+  const [beats, setBeats] = useState<4 | 8>(timerSettings.metronomeBeats);
   const [isMetronomeRunning, setIsMetronomeRunning] = useState(false);
   const [currentBeat, setCurrentBeat] = useState(0);
   const metronomeRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Feedback mode
+  const [feedbackMode, setFeedbackMode] = useState<FeedbackMode>(timerSettings.feedbackMode || 'both');
+
+  // Audio
+  const soundRef = useRef<Audio.Sound | null>(null);
+  const clickSoundRef = useRef<Audio.Sound | null>(null);
+  const accentSoundRef = useRef<Audio.Sound | null>(null);
+
   const intervalOptions = [30, 45, 60, 90, 120, 180, 300];
 
   useEffect(() => {
+    setupAudio();
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
       if (metronomeRef.current) clearInterval(metronomeRef.current);
+      cleanupAudio();
     };
   }, []);
+
+  const setupAudio = async () => {
+    try {
+      await Audio.setAudioModeAsync({
+        playsInSilentModeIOS: true,
+      });
+    } catch {
+      // Silently fail
+    }
+  };
+
+  const cleanupAudio = async () => {
+    try {
+      if (soundRef.current) await soundRef.current.unloadAsync();
+      if (clickSoundRef.current) await clickSoundRef.current.unloadAsync();
+      if (accentSoundRef.current) await accentSoundRef.current.unloadAsync();
+    } catch {
+      // Silently fail
+    }
+  };
+
+  const playBeep = useCallback(async (isAccent: boolean) => {
+    const shouldVibrate = feedbackMode === 'vibration' || feedbackMode === 'both';
+    const shouldSound = feedbackMode === 'sound' || feedbackMode === 'both';
+
+    if (shouldVibrate) {
+      Vibration.vibrate(isAccent ? 30 : 10);
+    }
+
+    if (shouldSound) {
+      try {
+        // 簡易的なビープ音をAudioで生成
+        const { sound } = await Audio.Sound.createAsync(
+          { uri: `data:audio/wav;base64,${isAccent ? generateAccentBeep() : generateNormalBeep()}` },
+          { shouldPlay: true, volume: isAccent ? 1.0 : 0.5 }
+        );
+        sound.setOnPlaybackStatusUpdate((status) => {
+          if ('didJustFinish' in status && status.didJustFinish) {
+            sound.unloadAsync();
+          }
+        });
+      } catch {
+        // 音が再生できない場合はバイブレーションにフォールバック
+        if (!shouldVibrate) {
+          Vibration.vibrate(isAccent ? 30 : 10);
+        }
+      }
+    }
+  }, [feedbackMode]);
+
+  const playTimerEnd = useCallback(async () => {
+    const shouldVibrate = feedbackMode === 'vibration' || feedbackMode === 'both';
+    const shouldSound = feedbackMode === 'sound' || feedbackMode === 'both';
+
+    if (shouldVibrate) {
+      Vibration.vibrate([0, 500, 200, 500, 200, 500]);
+    }
+
+    if (shouldSound) {
+      try {
+        const { sound } = await Audio.Sound.createAsync(
+          { uri: `data:audio/wav;base64,${generateTimerEndBeep()}` },
+          { shouldPlay: true, volume: 1.0 }
+        );
+        sound.setOnPlaybackStatusUpdate((status) => {
+          if ('didJustFinish' in status && status.didJustFinish) {
+            sound.unloadAsync();
+          }
+        });
+      } catch {
+        // Silently fail
+      }
+    }
+  }, [feedbackMode]);
 
   // Interval Timer Logic
   useEffect(() => {
@@ -37,8 +125,7 @@ export default function TimerScreen() {
         setRemainingTime((prev) => {
           if (prev <= 1) {
             setIsRunning(false);
-            Vibration.vibrate([0, 500, 200, 500]);
-            playSound();
+            playTimerEnd();
             return intervalTime;
           }
           return prev - 1;
@@ -51,15 +138,19 @@ export default function TimerScreen() {
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [isRunning, intervalTime]);
+  }, [isRunning, intervalTime, playTimerEnd]);
 
   // Metronome Logic
   useEffect(() => {
     if (isMetronomeRunning) {
       const intervalMs = (60 / bpm) * 1000;
       metronomeRef.current = setInterval(() => {
-        setCurrentBeat((prev) => (prev + 1) % beats);
-        playClick();
+        setCurrentBeat((prev) => {
+          const nextBeat = (prev + 1) % beats;
+          const isAccent = nextBeat === 0 || (beats === 8 && nextBeat === 4);
+          playBeep(isAccent);
+          return nextBeat;
+        });
       }, intervalMs);
     } else {
       if (metronomeRef.current) clearInterval(metronomeRef.current);
@@ -69,20 +160,7 @@ export default function TimerScreen() {
     return () => {
       if (metronomeRef.current) clearInterval(metronomeRef.current);
     };
-  }, [isMetronomeRunning, bpm, beats]);
-
-  const playSound = async () => {
-    // タイマー終了時はバイブレーションで通知
-    Vibration.vibrate([0, 500, 200, 500, 200, 500]);
-  };
-
-  const playClick = async () => {
-    try {
-      Vibration.vibrate(10);
-    } catch {
-      // Silently fail
-    }
-  };
+  }, [isMetronomeRunning, bpm, beats, playBeep]);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -106,16 +184,53 @@ export default function TimerScreen() {
     updateTimerSettings({ intervalSeconds: seconds });
   };
 
+  const applyCustomTime = () => {
+    const mins = parseInt(customMinutes, 10) || 0;
+    const secs = parseInt(customSeconds, 10) || 0;
+    const totalSeconds = mins * 60 + secs;
+    if (totalSeconds > 0) {
+      selectIntervalTime(totalSeconds);
+      setCustomMinutes('');
+      setCustomSeconds('');
+    }
+  };
+
   const adjustBpm = (delta: number) => {
-    const newBpm = Math.max(40, Math.min(120, bpm + delta));
+    const newBpm = Math.max(40, Math.min(200, bpm + delta));
     setBpm(newBpm);
     updateTimerSettings({ metronomeBpm: newBpm });
   };
 
-  const cycleBeats = () => {
-    const newBeats: 3 | 4 | 8 = beats === 3 ? 4 : beats === 4 ? 8 : 3;
+  const toggleBeats = () => {
+    const newBeats: 4 | 8 = beats === 4 ? 8 : 4;
     setBeats(newBeats);
     updateTimerSettings({ metronomeBeats: newBeats });
+  };
+
+  const cycleFeedbackMode = () => {
+    const modes: FeedbackMode[] = ['both', 'vibration', 'sound'];
+    const currentIndex = modes.indexOf(feedbackMode);
+    const newMode = modes[(currentIndex + 1) % modes.length];
+    setFeedbackMode(newMode);
+    updateTimerSettings({ feedbackMode: newMode });
+  };
+
+  const feedbackModeLabel: Record<FeedbackMode, string> = {
+    vibration: '振動のみ',
+    sound: '音のみ',
+    both: '振動+音',
+  };
+
+  const feedbackModeIcon: Record<FeedbackMode, string> = {
+    vibration: 'vibrate',
+    sound: 'volume-high',
+    both: 'bell-ring',
+  };
+
+  const isAccentBeat = (beatIndex: number) => {
+    if (beatIndex === 0) return true;
+    if (beats === 8 && beatIndex === 4) return true;
+    return false;
   };
 
   return (
@@ -129,6 +244,17 @@ export default function TimerScreen() {
         ]}
         style={styles.segmentedButtons}
       />
+
+      {/* フィードバックモード切り替え */}
+      <Button
+        mode="outlined"
+        icon={feedbackModeIcon[feedbackMode]}
+        onPress={cycleFeedbackMode}
+        style={styles.feedbackButton}
+        compact
+      >
+        {feedbackModeLabel[feedbackMode]}
+      </Button>
 
       {mode === 'interval' ? (
         <View style={styles.content}>
@@ -165,7 +291,7 @@ export default function TimerScreen() {
             )}
           </View>
 
-          <Text style={styles.sectionTitle}>休憩時間を選択</Text>
+          <Text style={styles.sectionTitle}>プリセット</Text>
           <View style={styles.intervalOptions}>
             {intervalOptions.map((seconds) => (
               <Button
@@ -178,6 +304,41 @@ export default function TimerScreen() {
                 {formatTime(seconds)}
               </Button>
             ))}
+          </View>
+
+          <Text style={[styles.sectionTitle, { marginTop: 16 }]}>カスタム時間</Text>
+          <View style={styles.customTimeRow}>
+            <TextInput
+              mode="outlined"
+              label="分"
+              value={customMinutes}
+              onChangeText={setCustomMinutes}
+              keyboardType="number-pad"
+              style={styles.customTimeInput}
+              outlineColor={darkTheme.colors.outline}
+              activeOutlineColor={darkTheme.colors.primary}
+              dense
+            />
+            <Text style={styles.customTimeSeparator}>:</Text>
+            <TextInput
+              mode="outlined"
+              label="秒"
+              value={customSeconds}
+              onChangeText={setCustomSeconds}
+              keyboardType="number-pad"
+              style={styles.customTimeInput}
+              outlineColor={darkTheme.colors.outline}
+              activeOutlineColor={darkTheme.colors.primary}
+              dense
+            />
+            <Button
+              mode="contained"
+              onPress={applyCustomTime}
+              compact
+              style={styles.customTimeButton}
+            >
+              設定
+            </Button>
           </View>
         </View>
       ) : (
@@ -194,7 +355,8 @@ export default function TimerScreen() {
                     style={[
                       styles.beatDot,
                       currentBeat === i && isMetronomeRunning && styles.beatDotActive,
-                      i === 0 && styles.beatDotFirst,
+                      isAccentBeat(i) && styles.beatDotAccent,
+                      currentBeat === i && isMetronomeRunning && isAccentBeat(i) && styles.beatDotAccentActive,
                     ]}
                   />
                 ))}
@@ -231,7 +393,7 @@ export default function TimerScreen() {
 
           <Button
             mode="outlined"
-            onPress={cycleBeats}
+            onPress={toggleBeats}
             style={styles.beatsButton}
           >
             {beats}拍子
@@ -254,6 +416,105 @@ export default function TimerScreen() {
   );
 }
 
+// WAV音声データ生成ヘルパー
+const generateWavHeader = (dataLength: number, sampleRate: number = 22050): number[] => {
+  const header = [];
+  const totalLength = 44 + dataLength;
+
+  // RIFF header
+  header.push(0x52, 0x49, 0x46, 0x46); // "RIFF"
+  pushInt32LE(header, totalLength - 8);
+  header.push(0x57, 0x41, 0x56, 0x45); // "WAVE"
+
+  // fmt chunk
+  header.push(0x66, 0x6D, 0x74, 0x20); // "fmt "
+  pushInt32LE(header, 16); // chunk size
+  pushInt16LE(header, 1); // PCM format
+  pushInt16LE(header, 1); // mono
+  pushInt32LE(header, sampleRate);
+  pushInt32LE(header, sampleRate); // byte rate (8-bit mono)
+  pushInt16LE(header, 1); // block align
+  pushInt16LE(header, 8); // bits per sample
+
+  // data chunk
+  header.push(0x64, 0x61, 0x74, 0x61); // "data"
+  pushInt32LE(header, dataLength);
+
+  return header;
+};
+
+const pushInt16LE = (arr: number[], value: number) => {
+  arr.push(value & 0xFF, (value >> 8) & 0xFF);
+};
+
+const pushInt32LE = (arr: number[], value: number) => {
+  arr.push(value & 0xFF, (value >> 8) & 0xFF, (value >> 16) & 0xFF, (value >> 24) & 0xFF);
+};
+
+const arrayToBase64 = (bytes: number[]): string => {
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+};
+
+const generateNormalBeep = (): string => {
+  const sampleRate = 22050;
+  const duration = 0.05; // 50ms
+  const frequency = 800;
+  const samples = Math.floor(sampleRate * duration);
+  const data: number[] = [];
+
+  for (let i = 0; i < samples; i++) {
+    const t = i / sampleRate;
+    const value = Math.sin(2 * Math.PI * frequency * t) * 0.5;
+    data.push(Math.floor((value + 1) * 127.5));
+  }
+
+  const header = generateWavHeader(data.length, sampleRate);
+  return arrayToBase64([...header, ...data]);
+};
+
+const generateAccentBeep = (): string => {
+  const sampleRate = 22050;
+  const duration = 0.08; // 80ms
+  const frequency = 1200;
+  const samples = Math.floor(sampleRate * duration);
+  const data: number[] = [];
+
+  for (let i = 0; i < samples; i++) {
+    const t = i / sampleRate;
+    const envelope = 1 - (i / samples) * 0.5;
+    const value = Math.sin(2 * Math.PI * frequency * t) * 0.8 * envelope;
+    data.push(Math.floor((value + 1) * 127.5));
+  }
+
+  const header = generateWavHeader(data.length, sampleRate);
+  return arrayToBase64([...header, ...data]);
+};
+
+const generateTimerEndBeep = (): string => {
+  const sampleRate = 22050;
+  const duration = 0.8;
+  const samples = Math.floor(sampleRate * duration);
+  const data: number[] = [];
+
+  for (let i = 0; i < samples; i++) {
+    const t = i / sampleRate;
+    // 3回のビープ音
+    const beepPhase = (t * 3) % 1;
+    const isOn = beepPhase < 0.4;
+    const frequency = 1000;
+    const envelope = isOn ? 1 : 0;
+    const value = Math.sin(2 * Math.PI * frequency * t) * 0.8 * envelope;
+    data.push(Math.floor((value + 1) * 127.5));
+  }
+
+  const header = generateWavHeader(data.length, sampleRate);
+  return arrayToBase64([...header, ...data]);
+};
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -261,7 +522,11 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   segmentedButtons: {
-    marginBottom: 24,
+    marginBottom: 12,
+  },
+  feedbackButton: {
+    marginBottom: 16,
+    alignSelf: 'center',
   },
   content: {
     flex: 1,
@@ -304,7 +569,7 @@ const styles = StyleSheet.create({
   beatIndicators: {
     flexDirection: 'row',
     marginTop: 24,
-    gap: 16,
+    gap: 12,
   },
   beatDot: {
     width: 20,
@@ -316,8 +581,15 @@ const styles = StyleSheet.create({
     backgroundColor: darkTheme.colors.primary,
     transform: [{ scale: 1.3 }],
   },
-  beatDotFirst: {
+  beatDotAccent: {
     backgroundColor: darkTheme.colors.secondary,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+  },
+  beatDotAccentActive: {
+    backgroundColor: '#f59e0b',
+    transform: [{ scale: 1.4 }],
   },
   bpmControls: {
     flexDirection: 'row',
@@ -346,7 +618,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 16,
     color: darkTheme.colors.onSurfaceVariant,
-    marginBottom: 16,
+    marginBottom: 12,
     alignSelf: 'flex-start',
   },
   intervalOptions: {
@@ -357,5 +629,23 @@ const styles = StyleSheet.create({
   },
   intervalButton: {
     minWidth: 70,
+  },
+  customTimeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    width: '100%',
+  },
+  customTimeInput: {
+    width: 70,
+    height: 40,
+    backgroundColor: darkTheme.colors.surfaceVariant,
+  },
+  customTimeSeparator: {
+    fontSize: 24,
+    color: darkTheme.colors.onSurface,
+  },
+  customTimeButton: {
+    marginLeft: 8,
   },
 });

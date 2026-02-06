@@ -64,7 +64,7 @@ export default function HistoryScreen() {
   const getTotalReps = (workout: DailyWorkout, type: string) => {
     return workout.exercises
       .filter((e) => e.type === type)
-      .reduce((sum, e) => sum + e.sets.reduce((s, set) => s + set.reps, 0), 0);
+      .reduce((sum, e) => sum + e.sets.reduce((s, set) => s + set.entries.reduce((es, entry) => es + entry.reps, 0), 0), 0);
   };
 
   const getTotalSets = (workout: DailyWorkout, type: string) => {
@@ -138,7 +138,7 @@ export default function HistoryScreen() {
                         {exercise.sets.length} セット
                       </Chip>
                       <Chip style={styles.statChip} textStyle={styles.statChipText}>
-                        計 {exercise.sets.reduce((sum, s) => sum + s.reps, 0)} 回
+                        計 {exercise.sets.reduce((sum, s) => sum + s.entries.reduce((es, entry) => es + entry.reps, 0), 0)} 回
                       </Chip>
                     </View>
                   )}
@@ -146,9 +146,16 @@ export default function HistoryScreen() {
                   {exercise.type !== 'cardio' && exercise.sets.length > 0 && (
                     <View style={styles.setsDetail}>
                       {exercise.sets.map((set, index) => (
-                        <Text key={index} style={styles.setDetailText}>
-                          {index + 1}セット: {set.reps}回 {set.completed ? '✓' : ''}
-                        </Text>
+                        <View key={index} style={{ marginBottom: 4 }}>
+                          <Text style={styles.setDetailText}>
+                            {index + 1}セット {set.completed ? '✓' : ''}
+                          </Text>
+                          {set.entries.map((entry, ei) => (
+                            <Text key={ei} style={[styles.setDetailText, { marginLeft: 12 }]}>
+                              {entry.reps}回{entry.variation ? ` ${entry.variation}` : ''}{entry.tempo ? ` (${entry.tempo})` : ''}
+                            </Text>
+                          ))}
+                        </View>
                       ))}
                     </View>
                   )}

@@ -25,12 +25,12 @@ export const colors = {
   pushup: '#3b82f6',    // blue
   squat: '#22c55e',     // green
   pullup: '#f59e0b',    // amber
-  cardio: '#ec4899',    // pink
+  cardio: '#f472b6',    // pink bright
   bodypump: '#a855f7',  // purple
   bodycombat: '#ef4444', // red
   leapfight: '#14b8a6', // teal
-  strength: '#6366f1',  // indigo (combined strength)
-  both: '#a855f7',      // purple (both types)
+  strength: '#818cf8',  // indigo bright
+  both: '#c084fc',      // purple bright
 };
 
 export const calendarTheme = {

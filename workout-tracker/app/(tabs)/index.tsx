@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, ScrollView, StyleSheet } from 'react-native';
-import { Text, Card, Button, IconButton, TextInput, Chip, Portal, Dialog, SegmentedButtons } from 'react-native-paper';
+import { Text, Card, Button, IconButton, TextInput, Chip, Portal, Dialog } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useWorkoutStore } from '@/stores/workoutStore';
 import { darkTheme, colors } from '@/constants/theme';
@@ -14,10 +14,13 @@ export default function HomeScreen() {
     removeExercise,
     addSet,
     removeSet,
-    updateSetReps,
-    updateSetVariation,
-    updateSetTempo,
-    toggleSetAssistance,
+    copySet,
+    addSetEntry,
+    removeSetEntry,
+    updateEntryReps,
+    updateEntryVariation,
+    updateEntryTempo,
+    toggleEntryAssistance,
     toggleSetCompleted,
     updateDurationMinutes,
   } = useWorkoutStore();
@@ -25,7 +28,7 @@ export default function HomeScreen() {
   const todayWorkout = getTodayWorkout();
   const exercises = todayWorkout?.exercises || [];
 
-  const exerciseTypes: ExerciseType[] = ['pushup', 'squat', 'pullup', 'cardio', 'bodypump', 'bodycombat', 'leapfight'];
+  const exerciseTypes: ExerciseType[] = ['pushup', 'squat', 'pullup', 'bodypump', 'bodycombat', 'leapfight'];
 
   const handleAddExercise = (type: ExerciseType) => {
     addExercise(type);
@@ -104,82 +107,115 @@ export default function HomeScreen() {
                   </View>
                 ) : (
                   <>
-                    {exercise.sets.map((set, index) => (
-                      <View key={index} style={styles.setContainer}>
+                    {exercise.sets.map((set, setIndex) => (
+                      <View key={setIndex} style={styles.setContainer}>
                         <View style={styles.setHeader}>
-                          <Text style={styles.setLabel}>セット {index + 1}</Text>
+                          <Text style={styles.setLabel}>セット {setIndex + 1}</Text>
                           <View style={styles.setActions}>
+                            <IconButton
+                              icon="content-copy"
+                              iconColor={darkTheme.colors.onSurfaceVariant}
+                              size={18}
+                              onPress={() => copySet(exercise.id, setIndex)}
+                            />
                             <IconButton
                               icon={set.completed ? 'check-circle' : 'circle-outline'}
                               iconColor={set.completed ? '#22c55e' : darkTheme.colors.onSurfaceVariant}
                               size={20}
-                              onPress={() => toggleSetCompleted(exercise.id, index)}
+                              onPress={() => toggleSetCompleted(exercise.id, setIndex)}
                             />
                             <IconButton
                               icon="close"
                               iconColor={darkTheme.colors.error}
                               size={18}
-                              onPress={() => removeSet(exercise.id, index)}
+                              onPress={() => removeSet(exercise.id, setIndex)}
                             />
                           </View>
                         </View>
 
-                        <View style={styles.setRow}>
-                          <TextInput
-                            mode="outlined"
-                            label="回数"
-                            value={set.reps > 0 ? set.reps.toString() : ''}
-                            onChangeText={(text) => updateSetReps(exercise.id, index, parseInt(text, 10) || 0)}
-                            placeholder="0"
-                            keyboardType="number-pad"
-                            style={styles.repsInput}
-                            outlineColor={darkTheme.colors.outline}
-                            activeOutlineColor={getExerciseColor(exercise.type)}
-                            dense
-                          />
+                        {set.entries.map((entry, entryIndex) => (
+                          <View key={entryIndex} style={styles.entryContainer}>
+                            {set.entries.length > 1 && (
+                              <View style={styles.entryHeader}>
+                                <Text style={styles.entryLabel}>行 {entryIndex + 1}</Text>
+                                <IconButton
+                                  icon="close-circle-outline"
+                                  iconColor={darkTheme.colors.onSurfaceVariant}
+                                  size={16}
+                                  onPress={() => removeSetEntry(exercise.id, setIndex, entryIndex)}
+                                />
+                              </View>
+                            )}
 
-                          <TextInput
-                            mode="outlined"
-                            label="バリエーション"
-                            value={set.variation || ''}
-                            onChangeText={(text) => updateSetVariation(exercise.id, index, text)}
-                            placeholder="例: ナロー"
-                            style={styles.variationInput}
-                            outlineColor={darkTheme.colors.outline}
-                            activeOutlineColor={getExerciseColor(exercise.type)}
-                            dense
-                          />
-                        </View>
+                            <View style={styles.setRow}>
+                              <TextInput
+                                mode="outlined"
+                                label="回数"
+                                value={entry.reps > 0 ? entry.reps.toString() : ''}
+                                onChangeText={(text) => updateEntryReps(exercise.id, setIndex, entryIndex, parseInt(text, 10) || 0)}
+                                placeholder="0"
+                                keyboardType="number-pad"
+                                style={styles.repsInput}
+                                outlineColor={darkTheme.colors.outline}
+                                activeOutlineColor={getExerciseColor(exercise.type)}
+                                dense
+                              />
 
-                        <View style={styles.setRow}>
-                          <TextInput
-                            mode="outlined"
-                            label="テンポ"
-                            value={set.tempo || ''}
-                            onChangeText={(text) => updateSetTempo(exercise.id, index, text)}
-                            placeholder="例: 2-1-2"
-                            style={styles.tempoInput}
-                            outlineColor={darkTheme.colors.outline}
-                            activeOutlineColor={getExerciseColor(exercise.type)}
-                            dense
-                          />
+                              <TextInput
+                                mode="outlined"
+                                label="バリエーション"
+                                value={entry.variation || ''}
+                                onChangeText={(text) => updateEntryVariation(exercise.id, setIndex, entryIndex, text)}
+                                placeholder="例: ナロー"
+                                style={styles.variationInput}
+                                outlineColor={darkTheme.colors.outline}
+                                activeOutlineColor={getExerciseColor(exercise.type)}
+                                dense
+                              />
+                            </View>
 
-                          {exercise.type === 'pullup' && (
-                            <Chip
-                              mode={set.assistance ? 'flat' : 'outlined'}
-                              selected={set.assistance}
-                              onPress={() => toggleSetAssistance(exercise.id, index)}
-                              style={[
-                                styles.assistanceChip,
-                                set.assistance && { backgroundColor: getExerciseColor(exercise.type) }
-                              ]}
-                              textStyle={set.assistance ? { color: '#fff' } : { color: darkTheme.colors.onSurface }}
-                              icon={set.assistance ? 'check' : 'hand-back-left'}
-                            >
-                              補助あり
-                            </Chip>
-                          )}
-                        </View>
+                            <View style={styles.setRow}>
+                              <TextInput
+                                mode="outlined"
+                                label="テンポ"
+                                value={entry.tempo || ''}
+                                onChangeText={(text) => updateEntryTempo(exercise.id, setIndex, entryIndex, text)}
+                                placeholder="例: 2-1-2"
+                                style={styles.tempoInput}
+                                outlineColor={darkTheme.colors.outline}
+                                activeOutlineColor={getExerciseColor(exercise.type)}
+                                dense
+                              />
+
+                              {exercise.type === 'pullup' && (
+                                <Chip
+                                  mode={entry.assistance ? 'flat' : 'outlined'}
+                                  selected={entry.assistance}
+                                  onPress={() => toggleEntryAssistance(exercise.id, setIndex, entryIndex)}
+                                  style={[
+                                    styles.assistanceChip,
+                                    entry.assistance && { backgroundColor: getExerciseColor(exercise.type) }
+                                  ]}
+                                  textStyle={entry.assistance ? { color: '#fff' } : { color: darkTheme.colors.onSurface }}
+                                  icon={entry.assistance ? 'check' : 'hand-back-left'}
+                                >
+                                  補助あり
+                                </Chip>
+                              )}
+                            </View>
+                          </View>
+                        ))}
+
+                        <Button
+                          mode="text"
+                          icon="plus"
+                          onPress={() => addSetEntry(exercise.id, setIndex)}
+                          textColor={darkTheme.colors.onSurfaceVariant}
+                          compact
+                          style={styles.addEntryButton}
+                        >
+                          行追加
+                        </Button>
                       </View>
                     ))}
                     <Button
@@ -291,11 +327,23 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 4,
   },
   setActions: {
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  entryContainer: {
+    marginBottom: 4,
+  },
+  entryHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 2,
+  },
+  entryLabel: {
+    color: darkTheme.colors.onSurfaceVariant,
+    fontSize: 12,
   },
   setRow: {
     flexDirection: 'row',
@@ -324,6 +372,10 @@ const styles = StyleSheet.create({
   },
   assistanceChip: {
     marginLeft: 8,
+  },
+  addEntryButton: {
+    alignSelf: 'flex-start',
+    marginTop: 4,
   },
   durationButtons: {
     flexDirection: 'row',
