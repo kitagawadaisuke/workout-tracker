@@ -65,9 +65,9 @@ export const BUILTIN_EXERCISE_NAMES: Record<BuiltinExerciseType, string> = {
   squat: 'スクワット',
   pullup: '懸垂',
   cardio: '有酸素運動',
-  bodypump: 'BODYPUMP',
-  bodycombat: 'BODYCOMBAT',
-  leapfight: 'LEAP FIGHT',
+  bodypump: 'ボディパンプ',
+  bodycombat: 'ボディコンバット',
+  leapfight: 'リープファイト',
 };
 
 // 後方互換のためにエイリアスを残す

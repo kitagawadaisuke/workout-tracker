@@ -19,6 +19,8 @@ interface WorkoutState {
   workoutTimerRunning: boolean;
   workoutTimerStartedAt: number | null;
   workoutTimerTargetDate: string | null;
+  workoutTimerDraftSeconds: number;
+  workoutTimerDraftTargetDate: string | null;
 
   // Actions
   setSelectedDate: (date: string) => void;
@@ -39,7 +41,11 @@ interface WorkoutState {
   updateDurationMinutes: (exerciseId: string, minutes: number) => void;
   updateTimerSettings: (settings: Partial<TimerSettings>) => void;
   startWorkoutTimer: () => void;
+  pauseWorkoutTimer: () => void;
+  recordWorkoutTimer: () => void;
   stopWorkoutTimer: () => void;
+  resetWorkoutTimer: () => void;
+  copyLastWorkoutToSelectedDate: (mode?: 'replace' | 'append') => boolean;
   getTodayWorkout: () => DailyWorkout | undefined;
   getWorkoutByDate: (date: string) => DailyWorkout | undefined;
   getSelectedWorkoutDurationSeconds: () => number;
@@ -123,6 +129,8 @@ export const useWorkoutStore = create<WorkoutState>()(
       workoutTimerRunning: false,
       workoutTimerStartedAt: null,
       workoutTimerTargetDate: null,
+      workoutTimerDraftSeconds: 0,
+      workoutTimerDraftTargetDate: null,
 
       setSelectedDate: (date: string) => {
         set({ selectedDate: date });
@@ -386,55 +394,166 @@ export const useWorkoutStore = create<WorkoutState>()(
 
       startWorkoutTimer: () => {
         if (get().workoutTimerRunning) return;
-        const { selectedDate } = get();
+        const { selectedDate, workoutTimerDraftTargetDate } = get();
         set({
           workoutTimerRunning: true,
           workoutTimerStartedAt: Date.now(),
           workoutTimerTargetDate: selectedDate,
+          workoutTimerDraftTargetDate: workoutTimerDraftTargetDate && workoutTimerDraftTargetDate !== selectedDate ? selectedDate : (workoutTimerDraftTargetDate ?? selectedDate),
+          workoutTimerDraftSeconds: workoutTimerDraftTargetDate && workoutTimerDraftTargetDate !== selectedDate ? 0 : get().workoutTimerDraftSeconds,
         });
       },
 
-      stopWorkoutTimer: () => {
-        const { workoutTimerRunning, workoutTimerStartedAt, workoutTimerTargetDate } = get();
-        if (!workoutTimerRunning || !workoutTimerStartedAt) {
+      pauseWorkoutTimer: () => {
+        const { workoutTimerRunning, workoutTimerStartedAt, workoutTimerTargetDate, workoutTimerDraftTargetDate, workoutTimerDraftSeconds } = get();
+        if (!workoutTimerRunning || !workoutTimerStartedAt || !workoutTimerTargetDate) {
           set({ workoutTimerRunning: false, workoutTimerStartedAt: null, workoutTimerTargetDate: null });
           return;
         }
 
         const elapsedSeconds = Math.max(0, Math.floor((Date.now() - workoutTimerStartedAt) / 1000));
-        set((state) => {
-          if (elapsedSeconds === 0) {
-            return { workoutTimerRunning: false, workoutTimerStartedAt: null, workoutTimerTargetDate: null };
-          }
+        if (elapsedSeconds <= 0) {
+          set({ workoutTimerRunning: false, workoutTimerStartedAt: null, workoutTimerTargetDate: null });
+          return;
+        }
 
-          const targetDate = workoutTimerTargetDate;
-          if (!targetDate) {
-            return { workoutTimerRunning: false, workoutTimerStartedAt: null, workoutTimerTargetDate: null };
-          }
-          const existingWorkout = state.workouts.find((w) => w.date === targetDate);
-          if (existingWorkout) {
+        const nextDraftSeconds =
+          workoutTimerDraftTargetDate && workoutTimerDraftTargetDate !== workoutTimerTargetDate
+            ? elapsedSeconds
+            : workoutTimerDraftSeconds + elapsedSeconds;
+
+        set({
+          workoutTimerRunning: false,
+          workoutTimerStartedAt: null,
+          workoutTimerTargetDate: null,
+          workoutTimerDraftTargetDate: workoutTimerTargetDate,
+          workoutTimerDraftSeconds: nextDraftSeconds,
+        });
+      },
+
+      recordWorkoutTimer: () => {
+        const {
+          workoutTimerRunning,
+          workoutTimerStartedAt,
+          workoutTimerTargetDate,
+          workoutTimerDraftTargetDate,
+          workoutTimerDraftSeconds,
+          selectedDate,
+        } = get();
+
+        const targetDate = workoutTimerTargetDate ?? workoutTimerDraftTargetDate ?? selectedDate;
+        const runningSeconds =
+          workoutTimerRunning && workoutTimerStartedAt && workoutTimerTargetDate === targetDate
+            ? Math.max(0, Math.floor((Date.now() - workoutTimerStartedAt) / 1000))
+            : 0;
+        const draftSeconds = workoutTimerDraftTargetDate === targetDate ? workoutTimerDraftSeconds : 0;
+        const totalSeconds = draftSeconds + runningSeconds;
+
+        set((state) => {
+          if (totalSeconds <= 0) {
             return {
               workoutTimerRunning: false,
               workoutTimerStartedAt: null,
               workoutTimerTargetDate: null,
-              workouts: state.workouts.map((w) =>
+              workoutTimerDraftSeconds: 0,
+              workoutTimerDraftTargetDate: null,
+            };
+          }
+
+          const existingWorkout = state.workouts.find((w) => w.date === targetDate);
+          const updatedWorkouts = existingWorkout
+            ? state.workouts.map((w) =>
                 w.date === targetDate
-                  ? { ...w, durationSeconds: (w.durationSeconds || 0) + elapsedSeconds }
+                  ? { ...w, durationSeconds: (w.durationSeconds || 0) + totalSeconds }
+                  : w
+              )
+            : [
+                ...state.workouts,
+                { date: targetDate, exercises: [], durationSeconds: totalSeconds },
+              ];
+
+          return {
+            workoutTimerRunning: false,
+            workoutTimerStartedAt: null,
+            workoutTimerTargetDate: null,
+            workoutTimerDraftSeconds: 0,
+            workoutTimerDraftTargetDate: null,
+            workouts: updatedWorkouts,
+          };
+        });
+      },
+
+      stopWorkoutTimer: () => {
+        get().recordWorkoutTimer();
+      },
+
+      resetWorkoutTimer: () => {
+        set((state) => {
+          const targetDate = state.workoutTimerTargetDate ?? state.workoutTimerDraftTargetDate ?? state.selectedDate;
+          const updatedWorkouts = state.workouts
+            .map((w) =>
+              w.date === targetDate
+                ? { ...w, durationSeconds: 0 }
+                : w
+            )
+            .filter((w) => w.exercises.length > 0 || (w.durationSeconds || 0) > 0);
+
+          return {
+            workoutTimerRunning: false,
+            workoutTimerStartedAt: null,
+            workoutTimerTargetDate: null,
+            workoutTimerDraftSeconds: 0,
+            workoutTimerDraftTargetDate: null,
+            workouts: updatedWorkouts,
+          };
+        });
+      },
+
+      copyLastWorkoutToSelectedDate: (mode: 'replace' | 'append' = 'append') => {
+        const { workouts, selectedDate } = get();
+        const previousWorkouts = workouts
+          .filter((w) => w.date < selectedDate)
+          .sort((a, b) => (a.date < b.date ? 1 : -1));
+        const sourceWorkout = previousWorkouts[0];
+        if (!sourceWorkout) return false;
+
+        const now = new Date().toISOString();
+        const copiedExercises: Exercise[] = sourceWorkout.exercises.map((exercise) => ({
+          ...exercise,
+          id: generateId(),
+          createdAt: now,
+          sets: exercise.sets.map((set) => ({
+            ...set,
+            completed: false,
+            entries: set.entries.map((entry) => ({ ...entry })),
+          })),
+        }));
+
+        set((state) => {
+          const existingWorkout = state.workouts.find((w) => w.date === selectedDate);
+
+          if (existingWorkout) {
+            const nextExercises =
+              mode === 'replace' ? copiedExercises : [...existingWorkout.exercises, ...copiedExercises];
+            const nextDurationSeconds = mode === 'replace' ? 0 : (existingWorkout.durationSeconds || 0);
+            return {
+              workouts: state.workouts.map((w) =>
+                w.date === selectedDate
+                  ? { ...w, exercises: nextExercises, durationSeconds: nextDurationSeconds }
                   : w
               ),
             };
           }
 
           return {
-            workoutTimerRunning: false,
-            workoutTimerStartedAt: null,
-            workoutTimerTargetDate: null,
             workouts: [
               ...state.workouts,
-              { date: targetDate, exercises: [], durationSeconds: elapsedSeconds },
+              { date: selectedDate, exercises: copiedExercises, durationSeconds: 0 },
             ],
           };
         });
+
+        return true;
       },
 
       getTodayWorkout: () => {
@@ -447,13 +566,22 @@ export const useWorkoutStore = create<WorkoutState>()(
       },
 
       getSelectedWorkoutDurationSeconds: () => {
-        const { selectedDate, workoutTimerRunning, workoutTimerStartedAt, workoutTimerTargetDate } = get();
+        const {
+          selectedDate,
+          workoutTimerRunning,
+          workoutTimerStartedAt,
+          workoutTimerTargetDate,
+          workoutTimerDraftSeconds,
+          workoutTimerDraftTargetDate,
+        } = get();
         const existingWorkout = get().workouts.find((w) => w.date === selectedDate);
         const baseSeconds = existingWorkout?.durationSeconds || 0;
-        if (!workoutTimerRunning || !workoutTimerStartedAt) return baseSeconds;
-        if (workoutTimerTargetDate !== selectedDate) return baseSeconds;
-        const elapsedSeconds = Math.max(0, Math.floor((Date.now() - workoutTimerStartedAt) / 1000));
-        return baseSeconds + elapsedSeconds;
+        const draftSeconds = workoutTimerDraftTargetDate === selectedDate ? workoutTimerDraftSeconds : 0;
+        const runningSeconds =
+          workoutTimerRunning && workoutTimerStartedAt && workoutTimerTargetDate === selectedDate
+            ? Math.max(0, Math.floor((Date.now() - workoutTimerStartedAt) / 1000))
+            : 0;
+        return baseSeconds + draftSeconds + runningSeconds;
       },
 
       getAllWorkouts: () => {
@@ -462,7 +590,7 @@ export const useWorkoutStore = create<WorkoutState>()(
     }),
     {
       name: 'workout-storage',
-      version: 2,
+      version: 3,
       storage: createJSONStorage(() => AsyncStorage),
       migrate: (persistedState: any, version: number) => {
         if (version === 0 || !version) {
@@ -478,6 +606,8 @@ export const useWorkoutStore = create<WorkoutState>()(
           persistedState.workoutTimerRunning = false;
           persistedState.workoutTimerStartedAt = null;
           persistedState.workoutTimerTargetDate = null;
+          persistedState.workoutTimerDraftSeconds = 0;
+          persistedState.workoutTimerDraftTargetDate = null;
         }
         return persistedState as WorkoutState;
       },

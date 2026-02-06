@@ -29,6 +29,7 @@ export const colors = {
   bodypump: '#a855f7',  // purple
   bodycombat: '#ef4444', // red
   leapfight: '#14b8a6', // teal
+  duration: '#f472b6',  // pink bright
   strength: '#818cf8',  // indigo bright
   both: '#c084fc',      // purple bright
 };

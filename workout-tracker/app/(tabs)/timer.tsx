@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, StyleSheet, Vibration } from 'react-native';
+import { View, ScrollView, StyleSheet, Vibration, Alert } from 'react-native';
 import { Text, Button, SegmentedButtons, Card, IconButton, TextInput } from 'react-native-paper';
 import { Audio } from 'expo-av';
 import * as Speech from 'expo-speech';
@@ -12,7 +12,9 @@ export default function TimerScreen() {
     timerSettings,
     updateTimerSettings,
     startWorkoutTimer,
-    stopWorkoutTimer,
+    pauseWorkoutTimer,
+    recordWorkoutTimer,
+    resetWorkoutTimer,
     workoutTimerRunning,
     getSelectedWorkoutDurationSeconds,
   } = useWorkoutStore();
@@ -48,13 +50,12 @@ export default function TimerScreen() {
   useEffect(() => {
     setupAudio();
     return () => {
-      stopWorkoutTimer();
       if (intervalRef.current) clearInterval(intervalRef.current);
       if (metronomeRef.current) clearInterval(metronomeRef.current);
       cleanupAudio();
       Speech.stop();
     };
-  }, [stopWorkoutTimer]);
+  }, []);
 
   const setupAudio = async () => {
     try {
@@ -181,14 +182,6 @@ export default function TimerScreen() {
   }, [isMetronomeRunning, bpm, beats, playBeep]);
 
   useEffect(() => {
-    if (isMetronomeRunning) {
-      startWorkoutTimer();
-    } else {
-      stopWorkoutTimer();
-    }
-  }, [isMetronomeRunning, startWorkoutTimer, stopWorkoutTimer]);
-
-  useEffect(() => {
     if (!workoutTimerRunning) return;
     const intervalId = setInterval(() => {
       setDurationTick((tick) => tick + 1);
@@ -271,8 +264,10 @@ export default function TimerScreen() {
     return false;
   };
 
+  const workoutTimerTotalSeconds = getSelectedWorkoutDurationSeconds();
+
   return (
-    <View style={styles.container}>
+    <ScrollView style={styles.container} contentContainerStyle={styles.containerContent}>
       <SegmentedButtons
         value={mode}
         onValueChange={(value) => setMode(value as 'interval' | 'metronome')}
@@ -283,9 +278,65 @@ export default function TimerScreen() {
         style={styles.segmentedButtons}
       />
 
-      <Text style={styles.workoutDurationText}>
-        筋トレ時間 {formatTime(getSelectedWorkoutDurationSeconds())}
-      </Text>
+      <Card style={styles.workoutTimerCard}>
+        <Card.Content style={styles.workoutTimerContent}>
+          <Text style={styles.workoutTimerTitle}>筋トレタイマー</Text>
+          <Text style={styles.workoutTimerValue}>
+            {formatTime(workoutTimerTotalSeconds)}
+          </Text>
+          <View style={styles.workoutTimerActions}>
+            <View style={styles.workoutTimerRow}>
+              <Button
+                mode="contained"
+                onPress={startWorkoutTimer}
+                disabled={workoutTimerRunning}
+                style={styles.workoutTimerButton}
+                compact
+              >
+                開始
+              </Button>
+              <Button
+                mode="outlined"
+                onPress={pauseWorkoutTimer}
+                disabled={!workoutTimerRunning}
+                style={styles.workoutTimerButton}
+                compact
+              >
+                一時停止
+              </Button>
+            </View>
+            <View style={styles.workoutTimerRow}>
+              <Button
+                mode="outlined"
+                onPress={() => {
+                  Alert.alert(
+                    'リセット',
+                    '元に戻せません。リセットしますか？',
+                    [
+                      { text: 'キャンセル', style: 'cancel' },
+                      { text: 'リセット', style: 'destructive', onPress: resetWorkoutTimer },
+                    ]
+                  );
+                }}
+                disabled={!workoutTimerRunning && workoutTimerTotalSeconds === 0}
+                style={styles.workoutTimerButton}
+                compact
+              >
+                リセット
+              </Button>
+              <Button
+                mode="contained"
+                onPress={recordWorkoutTimer}
+                disabled={!workoutTimerRunning && workoutTimerTotalSeconds === 0}
+                style={styles.workoutTimerButton}
+                compact
+              >
+                記録
+              </Button>
+            </View>
+          </View>
+        </Card.Content>
+      </Card>
 
       <Button
         mode="outlined"
@@ -463,7 +514,7 @@ export default function TimerScreen() {
           </View>
         </View>
       )}
-    </View>
+    </ScrollView>
   );
 }
 
@@ -569,9 +620,11 @@ const generateTimerEndBeep = (): string => {
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
     backgroundColor: darkTheme.colors.background,
     padding: 16,
+  },
+  containerContent: {
+    paddingBottom: 120,
   },
   segmentedButtons: {
     marginBottom: 12,
@@ -580,11 +633,36 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     alignSelf: 'center',
   },
-  workoutDurationText: {
+  workoutTimerCard: {
+    backgroundColor: darkTheme.colors.surface,
+    width: '100%',
+    marginBottom: 12,
+  },
+  workoutTimerContent: {
+    alignItems: 'center',
+    paddingVertical: 12,
+  },
+  workoutTimerTitle: {
     fontSize: 14,
     color: darkTheme.colors.onSurfaceVariant,
-    alignSelf: 'center',
+    marginBottom: 4,
+  },
+  workoutTimerValue: {
+    fontSize: 24,
+    color: darkTheme.colors.onSurface,
+    fontVariant: ['tabular-nums'],
     marginBottom: 8,
+  },
+  workoutTimerActions: {
+    gap: 8,
+    width: '100%',
+  },
+  workoutTimerRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  workoutTimerButton: {
+    flex: 1,
   },
   content: {
     flex: 1,

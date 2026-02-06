@@ -1,23 +1,22 @@
 ﻿import React, { useState, useMemo } from 'react';
-import { View, ScrollView, StyleSheet } from 'react-native';
-import { Text, Card, Chip } from 'react-native-paper';
+import { View, ScrollView, StyleSheet, Alert } from 'react-native';
+import { Text, Card, Chip, Button } from 'react-native-paper';
 import { Calendar, DateData } from 'react-native-calendars';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useWorkoutStore } from '@/stores/workoutStore';
 import { darkTheme, calendarTheme, colors } from '@/constants/theme';
-import { DailyWorkout, EXERCISE_NAMES } from '@/types/workout';
+import { DailyWorkout, EXERCISE_NAMES, isDurationBasedExercise } from '@/types/workout';
 
 type MarkedDates = {
   [key: string]: {
-    marked?: boolean;
-    dotColor?: string;
+    dots?: { key: string; color: string }[];
     selected?: boolean;
     selectedColor?: string;
   };
 };
 
 export default function HistoryScreen() {
-  const { getAllWorkouts, getWorkoutByDate } = useWorkoutStore();
+  const { getAllWorkouts, getWorkoutByDate, setSelectedDate: setStoreSelectedDate, copyLastWorkoutToSelectedDate } = useWorkoutStore();
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
   const workouts = getAllWorkouts();
@@ -26,19 +25,19 @@ export default function HistoryScreen() {
     const marks: MarkedDates = {};
 
     workouts.forEach((workout) => {
-      const hasStrength = workout.exercises.some((e) => e.type !== 'cardio');
-      const hasCardio = workout.exercises.some((e) => e.type === 'cardio');
+      const hasStrength = workout.exercises.some((e) => !isDurationBasedExercise(e.type));
+      const hasDuration = workout.exercises.some((e) => isDurationBasedExercise(e.type));
 
-      let dotColor = colors.strength;
-      if (hasStrength && hasCardio) {
-        dotColor = colors.both;
-      } else if (hasCardio) {
-        dotColor = colors.cardio;
+      const dots: { key: string; color: string }[] = [];
+      if (hasStrength) {
+        dots.push({ key: 'strength', color: colors.strength });
+      }
+      if (hasDuration) {
+        dots.push({ key: 'duration', color: colors.duration || colors.cardio });
       }
 
       marks[workout.date] = {
-        marked: true,
-        dotColor,
+        dots,
       };
     });
 
@@ -55,9 +54,30 @@ export default function HistoryScreen() {
 
   const selectedWorkout = selectedDate ? getWorkoutByDate(selectedDate) : null;
 
+  const currentYM = new Date().toISOString().slice(0, 7);
+  const statsYM = selectedDate ? selectedDate.slice(0, 7) : currentYM;
+
+  const sumWorkoutTimerSeconds = (ws: DailyWorkout[]) =>
+    ws.reduce((sum, w) => sum + (w.durationSeconds || 0), 0);
+
+  const monthWorkouts = useMemo(
+    () => workouts.filter((w) => w.date.startsWith(statsYM)),
+    [workouts, statsYM]
+  );
+
+  const monthTotalSeconds = useMemo(
+    () => sumWorkoutTimerSeconds(monthWorkouts),
+    [monthWorkouts]
+  );
+
   const formatDuration = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
+    const totalSeconds = Math.max(0, Math.floor(seconds));
+    const hours = Math.floor(totalSeconds / 3600);
+    const mins = Math.floor((totalSeconds % 3600) / 60);
+    const secs = totalSeconds % 60;
+    if (hours > 0) {
+      return `${hours}時間${mins}分${secs > 0 ? ` ${secs}秒` : ''}`;
+    }
     return `${mins}分${secs > 0 ? ` ${secs}秒` : ''}`;
   };
 
@@ -81,37 +101,51 @@ export default function HistoryScreen() {
     <View style={styles.container}>
       <Calendar
         theme={calendarTheme}
+        markingType="multi-dot"
         markedDates={markedDates}
-        onDayPress={(day: DateData) => setSelectedDate(day.dateString)}
+        onDayPress={(day: DateData) => {
+          setSelectedDate(day.dateString);
+          setStoreSelectedDate(day.dateString);
+        }}
         enableSwipeMonths
         style={styles.calendar}
       />
 
-      <View style={styles.legend}>
-        <View style={styles.legendItem}>
-          <View style={[styles.legendDot, { backgroundColor: colors.strength }]} />
-          <Text style={styles.legendText}>筋トレ</Text>
-        </View>
-        <View style={styles.legendItem}>
-          <View style={[styles.legendDot, { backgroundColor: colors.cardio }]} />
-          <Text style={styles.legendText}>有酸素</Text>
-        </View>
-        <View style={styles.legendItem}>
-          <View style={[styles.legendDot, { backgroundColor: colors.both }]} />
-          <Text style={styles.legendText}>両方</Text>
-        </View>
-      </View>
+      <Card style={styles.statsCard}>
+        <Card.Content>
+          <Text style={styles.statsTitle}>今月の統計</Text>
+          <Text style={styles.statsLabel}>合計時間</Text>
+          <Text style={styles.statsValue}>{formatDuration(monthTotalSeconds)}</Text>
+        </Card.Content>
+      </Card>
 
       <ScrollView style={styles.detailsContainer}>
         {selectedDate && (
-          <Text style={styles.selectedDateText}>
-            {new Date(selectedDate).toLocaleDateString('ja-JP', {
-              year: 'numeric',
-              month: 'long',
-              day: 'numeric',
-              weekday: 'long',
-            })}
-          </Text>
+          <>
+            <Text style={styles.selectedDateText}>
+              {new Date(selectedDate).toLocaleDateString('ja-JP', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+                weekday: 'long',
+              })}
+            </Text>
+            <Button
+              mode="outlined"
+              onPress={() => {
+                const copied = copyLastWorkoutToSelectedDate('append');
+                if (copied) {
+                  Alert.alert('コピー完了', '前回のトレーニングを追加しました。');
+                } else {
+                  Alert.alert('コピーできません', 'コピー元のトレーニングが見つかりません。');
+                }
+              }}
+              style={styles.copyButton}
+              compact
+            >
+              前回の内容をコピー
+            </Button>
+          </>
         )}
 
         {selectedWorkout ? (
@@ -128,7 +162,7 @@ export default function HistoryScreen() {
                     <Text style={styles.exerciseName}>{exercise.name}</Text>
                   </View>
 
-                  {exercise.type === 'cardio' ? (
+                  {isDurationBasedExercise(exercise.type) ? (
                     <Text style={styles.statText}>
                       {formatDuration(exercise.duration || 0)}
                     </Text>
@@ -143,7 +177,7 @@ export default function HistoryScreen() {
                     </View>
                   )}
 
-                  {exercise.type !== 'cardio' && exercise.sets.length > 0 && (
+                  {!isDurationBasedExercise(exercise.type) && exercise.sets.length > 0 && (
                     <View style={styles.setsDetail}>
                       {exercise.sets.map((set, index) => (
                         <View key={index} style={{ marginBottom: 4 }}>
@@ -183,15 +217,21 @@ export default function HistoryScreen() {
                   );
                 })}
                 {selectedWorkout.exercises
-                  .filter((e) => e.type === 'cardio')
+                  .filter((e) => isDurationBasedExercise(e.type))
                   .map((e) => (
                     <View key={e.id} style={styles.summaryRow}>
-                      <Text style={styles.summaryLabel}>有酸素運動</Text>
+                      <Text style={styles.summaryLabel}>{e.name}</Text>
                       <Text style={styles.summaryValue}>
                         {formatDuration(e.duration || 0)}
                       </Text>
                     </View>
                   ))}
+                <View style={styles.summaryRow}>
+                  <Text style={styles.summaryLabel}>合計時間</Text>
+                  <Text style={styles.summaryValue}>
+                    {formatDuration(selectedWorkout.durationSeconds || 0)}
+                  </Text>
+                </View>
               </Card.Content>
             </Card>
           </>
@@ -232,27 +272,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: darkTheme.colors.outline,
   },
-  legend: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 24,
-    paddingVertical: 12,
-    backgroundColor: darkTheme.colors.surface,
-  },
-  legendItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  legendDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-  },
-  legendText: {
-    fontSize: 12,
-    color: darkTheme.colors.onSurfaceVariant,
-  },
   detailsContainer: {
     flex: 1,
     padding: 16,
@@ -261,6 +280,10 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: darkTheme.colors.onSurface,
+    marginBottom: 16,
+  },
+  copyButton: {
+    alignSelf: 'flex-start',
     marginBottom: 16,
   },
   exerciseCard: {
@@ -325,6 +348,27 @@ const styles = StyleSheet.create({
   summaryValue: {
     color: darkTheme.colors.onSurface,
     fontWeight: '500',
+  },
+  statsCard: {
+    backgroundColor: darkTheme.colors.surfaceVariant,
+    marginTop: 8,
+    marginHorizontal: 16,
+  },
+  statsTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: darkTheme.colors.onSurface,
+    marginBottom: 8,
+  },
+  statsLabel: {
+    fontSize: 12,
+    color: darkTheme.colors.onSurfaceVariant,
+    marginBottom: 4,
+  },
+  statsValue: {
+    fontSize: 20,
+    color: darkTheme.colors.onSurface,
+    fontWeight: '600',
   },
   emptyCard: {
     backgroundColor: darkTheme.colors.surface,
