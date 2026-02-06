@@ -25,6 +25,7 @@ interface WorkoutState {
   addSetEntry: (exerciseId: string, setIndex: number) => void;
   removeSetEntry: (exerciseId: string, setIndex: number, entryIndex: number) => void;
   updateEntryReps: (exerciseId: string, setIndex: number, entryIndex: number, reps: number) => void;
+  updateEntryWeight: (exerciseId: string, setIndex: number, entryIndex: number, weight: number) => void;
   updateEntryVariation: (exerciseId: string, setIndex: number, entryIndex: number, variation: string) => void;
   updateEntryTempo: (exerciseId: string, setIndex: number, entryIndex: number, tempo: string) => void;
   toggleEntryAssistance: (exerciseId: string, setIndex: number, entryIndex: number) => void;
@@ -271,6 +272,10 @@ export const useWorkoutStore = create<WorkoutState>()(
 
       updateEntryReps: (exerciseId: string, setIndex: number, entryIndex: number, reps: number) => {
         set((state) => updateTodayEntry(state, exerciseId, setIndex, entryIndex, (entry) => ({ ...entry, reps })));
+      },
+
+      updateEntryWeight: (exerciseId: string, setIndex: number, entryIndex: number, weight: number) => {
+        set((state) => updateTodayEntry(state, exerciseId, setIndex, entryIndex, (entry) => ({ ...entry, weight })));
       },
 
       updateEntryVariation: (exerciseId: string, setIndex: number, entryIndex: number, variation: string) => {

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { View, StyleSheet, Vibration } from 'react-native';
 import { Text, Button, SegmentedButtons, Card, IconButton, TextInput } from 'react-native-paper';
 import { Audio } from 'expo-av';
+import * as Speech from 'expo-speech';
 import { useWorkoutStore } from '@/stores/workoutStore';
 import { darkTheme } from '@/constants/theme';
 import { FeedbackMode } from '@/types/workout';
@@ -23,6 +24,7 @@ export default function TimerScreen() {
   const [beats, setBeats] = useState<4 | 8>(timerSettings.metronomeBeats);
   const [isMetronomeRunning, setIsMetronomeRunning] = useState(false);
   const [currentBeat, setCurrentBeat] = useState(0);
+  const [barCount, setBarCount] = useState(0);
   const metronomeRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Feedback mode
@@ -41,6 +43,7 @@ export default function TimerScreen() {
       if (intervalRef.current) clearInterval(intervalRef.current);
       if (metronomeRef.current) clearInterval(metronomeRef.current);
       cleanupAudio();
+      Speech.stop();
     };
   }, []);
 
@@ -74,10 +77,10 @@ export default function TimerScreen() {
 
     if (shouldSound) {
       try {
-        // 簡易的なビープ音をAudioで生成
+        // 柔らかめのクリック音
         const { sound } = await Audio.Sound.createAsync(
           { uri: `data:audio/wav;base64,${isAccent ? generateAccentBeep() : generateNormalBeep()}` },
-          { shouldPlay: true, volume: isAccent ? 1.0 : 0.5 }
+          { shouldPlay: true, volume: isAccent ? 0.75 : 0.45 }
         );
         sound.setOnPlaybackStatusUpdate((status) => {
           if ('didJustFinish' in status && status.didJustFinish) {
@@ -85,7 +88,7 @@ export default function TimerScreen() {
           }
         });
       } catch {
-        // 音が再生できない場合はバイブレーションにフォールバック
+        // 音が出ない場合はバイブレーションでフォールバック
         if (!shouldVibrate) {
           Vibration.vibrate(isAccent ? 30 : 10);
         }
@@ -149,6 +152,12 @@ export default function TimerScreen() {
           const nextBeat = (prev + 1) % beats;
           const isAccent = nextBeat === 0 || (beats === 8 && nextBeat === 4);
           playBeep(isAccent);
+
+          if (nextBeat === 0) {
+            setBarCount((prevBars) => prevBars + 1);
+            Speech.speak('1');
+          }
+
           return nextBeat;
         });
       }, intervalMs);
@@ -207,6 +216,10 @@ export default function TimerScreen() {
     updateTimerSettings({ metronomeBeats: newBeats });
   };
 
+  const resetBarCount = () => {
+    setBarCount(0);
+  };
+
   const cycleFeedbackMode = () => {
     const modes: FeedbackMode[] = ['both', 'vibration', 'sound'];
     const currentIndex = modes.indexOf(feedbackMode);
@@ -245,7 +258,6 @@ export default function TimerScreen() {
         style={styles.segmentedButtons}
       />
 
-      {/* フィードバックモード切り替え */}
       <Button
         mode="outlined"
         icon={feedbackModeIcon[feedbackMode]}
@@ -337,7 +349,7 @@ export default function TimerScreen() {
               compact
               style={styles.customTimeButton}
             >
-              設定
+              適用
             </Button>
           </View>
         </View>
@@ -347,6 +359,7 @@ export default function TimerScreen() {
             <Card.Content style={styles.metronomeContent}>
               <Text style={styles.bpmDisplay}>{bpm}</Text>
               <Text style={styles.bpmLabel}>BPM</Text>
+              <Text style={styles.barCountLabel}>小節数: {barCount}</Text>
 
               <View style={styles.beatIndicators}>
                 {Array.from({ length: beats }).map((_, i) => (
@@ -391,13 +404,22 @@ export default function TimerScreen() {
             />
           </View>
 
-          <Button
-            mode="outlined"
-            onPress={toggleBeats}
-            style={styles.beatsButton}
-          >
-            {beats}拍子
-          </Button>
+          <View style={styles.metronomeActions}>
+            <Button
+              mode="outlined"
+              onPress={toggleBeats}
+              style={styles.beatsButton}
+            >
+              {beats}拍子
+            </Button>
+            <Button
+              mode="outlined"
+              onPress={resetBarCount}
+              style={styles.resetButton}
+            >
+              リセット
+            </Button>
+          </View>
 
           <View style={styles.buttonRow}>
             <Button
@@ -416,7 +438,7 @@ export default function TimerScreen() {
   );
 }
 
-// WAV音声データ生成ヘルパー
+// WAVサウンド生成ヘルパー
 const generateWavHeader = (dataLength: number, sampleRate: number = 22050): number[] => {
   const header = [];
   const totalLength = 44 + dataLength;
@@ -461,14 +483,15 @@ const arrayToBase64 = (bytes: number[]): string => {
 
 const generateNormalBeep = (): string => {
   const sampleRate = 22050;
-  const duration = 0.05; // 50ms
-  const frequency = 800;
+  const duration = 0.035; // 35ms
+  const frequency = 620;
   const samples = Math.floor(sampleRate * duration);
   const data: number[] = [];
 
   for (let i = 0; i < samples; i++) {
     const t = i / sampleRate;
-    const value = Math.sin(2 * Math.PI * frequency * t) * 0.5;
+    const envelope = Math.exp(-t * 55);
+    const value = Math.sin(2 * Math.PI * frequency * t) * 0.6 * envelope;
     data.push(Math.floor((value + 1) * 127.5));
   }
 
@@ -478,15 +501,15 @@ const generateNormalBeep = (): string => {
 
 const generateAccentBeep = (): string => {
   const sampleRate = 22050;
-  const duration = 0.08; // 80ms
-  const frequency = 1200;
+  const duration = 0.045; // 45ms
+  const frequency = 900;
   const samples = Math.floor(sampleRate * duration);
   const data: number[] = [];
 
   for (let i = 0; i < samples; i++) {
     const t = i / sampleRate;
-    const envelope = 1 - (i / samples) * 0.5;
-    const value = Math.sin(2 * Math.PI * frequency * t) * 0.8 * envelope;
+    const envelope = Math.exp(-t * 45);
+    const value = Math.sin(2 * Math.PI * frequency * t) * 0.75 * envelope;
     data.push(Math.floor((value + 1) * 127.5));
   }
 
@@ -502,7 +525,7 @@ const generateTimerEndBeep = (): string => {
 
   for (let i = 0; i < samples; i++) {
     const t = i / sampleRate;
-    // 3回のビープ音
+    // 3拍のビープ音
     const beepPhase = (t * 3) % 1;
     const isOn = beepPhase < 0.4;
     const frequency = 1000;
@@ -566,6 +589,11 @@ const styles = StyleSheet.create({
     color: darkTheme.colors.onSurfaceVariant,
     marginTop: 4,
   },
+  barCountLabel: {
+    marginTop: 8,
+    fontSize: 14,
+    color: darkTheme.colors.onSurfaceVariant,
+  },
   beatIndicators: {
     flexDirection: 'row',
     marginTop: 24,
@@ -597,8 +625,17 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 16,
   },
+  metronomeActions: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 8,
+  },
   beatsButton: {
-    marginBottom: 24,
+    marginBottom: 0,
+    flex: 1,
+  },
+  resetButton: {
+    flex: 1,
   },
   buttonRow: {
     flexDirection: 'row',

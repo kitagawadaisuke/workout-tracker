@@ -9,10 +9,20 @@ export interface SetEntry {
   assistance?: boolean; // 懸垂の補助あり/なし
 }
 
+export interface MetronomeSettings {
+  enabled: boolean;
+  bpm: number;
+  beatsPerBar: number;
+}
+
 export interface WorkoutSet {
   entries: SetEntry[];
   completed: boolean;
-  metronome?: boolean; // このセットでメトロノームを使うか
+  variation?: string;
+  tempo?: string;
+  assistance?: boolean;
+  durationMinutes?: number;
+  metronome?: boolean | MetronomeSettings; // このセットでメトロノームを使うか
 }
 
 export interface Exercise {
@@ -96,3 +106,4 @@ export const AVAILABLE_COLORS = [
   '#ef4444', '#14b8a6', '#6366f1', '#ec4899', '#06b6d4',
   '#f97316', '#84cc16', '#8b5cf6', '#e11d48', '#0ea5e9',
 ];
+

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+﻿import React, { useState, useMemo } from 'react';
 import { View, ScrollView, StyleSheet } from 'react-native';
 import { Text, Card, Chip } from 'react-native-paper';
 import { Calendar, DateData } from 'react-native-calendars';
@@ -138,7 +138,7 @@ export default function HistoryScreen() {
                         {exercise.sets.length} セット
                       </Chip>
                       <Chip style={styles.statChip} textStyle={styles.statChipText}>
-                        計 {exercise.sets.reduce((sum, s) => sum + s.entries.reduce((es, entry) => es + entry.reps, 0), 0)} 回
+                        合計 {exercise.sets.reduce((sum, s) => sum + s.entries.reduce((es, entry) => es + entry.reps, 0), 0)} 回
                       </Chip>
                     </View>
                   )}
@@ -148,10 +148,11 @@ export default function HistoryScreen() {
                       {exercise.sets.map((set, index) => (
                         <View key={index} style={{ marginBottom: 4 }}>
                           <Text style={styles.setDetailText}>
-                            {index + 1}セット {set.completed ? '✓' : ''}
+                            {index + 1}セット {set.completed ? '完了' : ''}
                           </Text>
                           {set.entries.map((entry, ei) => (
-                            <Text key={ei} style={[styles.setDetailText, { marginLeft: 12 }]}>
+                            <Text key={ei} style={[styles.setDetailText, { marginLeft: 12 }]}
+                            >
                               {entry.reps}回{entry.variation ? ` ${entry.variation}` : ''}{entry.tempo ? ` (${entry.tempo})` : ''}
                             </Text>
                           ))}
@@ -213,7 +214,7 @@ export default function HistoryScreen() {
                 size={48}
                 color={darkTheme.colors.onSurfaceVariant}
               />
-              <Text style={styles.emptyText}>日付をタップして詳細を確認</Text>
+              <Text style={styles.emptyText}>日付をタップして詳細を表示</Text>
             </Card.Content>
           </Card>
         )}
@@ -338,3 +339,4 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
 });
+
