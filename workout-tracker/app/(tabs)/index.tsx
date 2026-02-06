@@ -1,16 +1,23 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, ScrollView, StyleSheet } from 'react-native';
 import { Text, Card, Button, IconButton, TextInput, Chip, Portal, Dialog } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { Calendar, DateData } from 'react-native-calendars';
 import { useWorkoutStore } from '@/stores/workoutStore';
-import { darkTheme, colors } from '@/constants/theme';
+import { darkTheme, colors, calendarTheme } from '@/constants/theme';
 import { ExerciseType, EXERCISE_NAMES, EXERCISE_ICONS, isDurationBasedExercise, DURATION_PRESETS } from '@/types/workout';
 
 export default function HomeScreen() {
   const [dialogVisible, setDialogVisible] = useState(false);
+  const [datePickerVisible, setDatePickerVisible] = useState(false);
   const [expandedEntries, setExpandedEntries] = useState<Record<string, boolean>>({});
+  const [, setTimerTick] = useState(0);
   const {
-    getTodayWorkout,
+    selectedDate,
+    setSelectedDate,
+    workoutTimerRunning,
+    getWorkoutByDate,
+    getSelectedWorkoutDurationSeconds,
     addExercise,
     removeExercise,
     addSet,
@@ -27,8 +34,8 @@ export default function HomeScreen() {
     updateDurationMinutes,
   } = useWorkoutStore();
 
-  const todayWorkout = getTodayWorkout();
-  const exercises = todayWorkout?.exercises || [];
+  const selectedWorkout = getWorkoutByDate(selectedDate);
+  const exercises = selectedWorkout?.exercises || [];
 
   const exerciseTypes: ExerciseType[] = ['pushup', 'squat', 'pullup', 'bodypump', 'bodycombat', 'leapfight'];
 
@@ -45,12 +52,28 @@ export default function HomeScreen() {
     return EXERCISE_ICONS[type] || 'dumbbell';
   };
 
-  const today = new Date().toLocaleDateString('ja-JP', {
+  useEffect(() => {
+    if (!workoutTimerRunning) return;
+    const intervalId = setInterval(() => {
+      setTimerTick((tick) => tick + 1);
+    }, 1000);
+    return () => clearInterval(intervalId);
+  }, [workoutTimerRunning]);
+
+  const formattedDate = new Date(`${selectedDate}T00:00:00`).toLocaleDateString('ja-JP', {
     year: 'numeric',
     month: 'long',
     day: 'numeric',
     weekday: 'long',
   });
+
+  const formatDuration = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const workoutDurationSeconds = getSelectedWorkoutDurationSeconds();
 
   const toggleEntryDetail = (key: string) => {
     setExpandedEntries((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -59,7 +82,18 @@ export default function HomeScreen() {
   return (
     <View style={styles.container}>
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
-        <Text style={styles.dateText}>{today}</Text>
+        <View style={styles.dateRow}>
+          <Text style={styles.dateText}>{formattedDate}</Text>
+          <Button
+            mode="text"
+            onPress={() => setDatePickerVisible(true)}
+            compact
+            textColor={darkTheme.colors.onSurfaceVariant}
+          >
+            日付変更
+          </Button>
+        </View>
+        <Text style={styles.durationText}>筋トレ時間 {formatDuration(workoutDurationSeconds)}</Text>
 
         {exercises.length === 0 ? (
           <Card style={styles.emptyCard}>
@@ -322,6 +356,31 @@ export default function HomeScreen() {
           </Dialog.Actions>
         </Dialog>
       </Portal>
+
+      <Portal>
+        <Dialog visible={datePickerVisible} onDismiss={() => setDatePickerVisible(false)} style={styles.dialog}>
+          <Dialog.Title>日付を選択</Dialog.Title>
+          <Dialog.Content>
+            <Calendar
+              theme={calendarTheme}
+              markedDates={{
+                [selectedDate]: {
+                  selected: true,
+                  selectedColor: darkTheme.colors.primary,
+                },
+              }}
+              onDayPress={(day: DateData) => {
+                setSelectedDate(day.dateString);
+                setDatePickerVisible(false);
+              }}
+              enableSwipeMonths
+            />
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setDatePickerVisible(false)}>キャンセル</Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
     </View>
   );
 }
@@ -343,6 +402,17 @@ const styles = StyleSheet.create({
     color: darkTheme.colors.onSurface,
     marginBottom: 16,
     fontWeight: '600',
+  },
+  dateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  durationText: {
+    fontSize: 14,
+    color: darkTheme.colors.onSurfaceVariant,
+    marginBottom: 16,
   },
   emptyCard: {
     backgroundColor: darkTheme.colors.surface,

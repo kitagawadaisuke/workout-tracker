@@ -8,7 +8,14 @@ import { darkTheme } from '@/constants/theme';
 import { FeedbackMode } from '@/types/workout';
 
 export default function TimerScreen() {
-  const { timerSettings, updateTimerSettings } = useWorkoutStore();
+  const {
+    timerSettings,
+    updateTimerSettings,
+    startWorkoutTimer,
+    stopWorkoutTimer,
+    workoutTimerRunning,
+    getSelectedWorkoutDurationSeconds,
+  } = useWorkoutStore();
   const [mode, setMode] = useState<'interval' | 'metronome'>('interval');
 
   // Interval Timer State
@@ -18,6 +25,7 @@ export default function TimerScreen() {
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [customMinutes, setCustomMinutes] = useState('');
   const [customSeconds, setCustomSeconds] = useState('');
+  const [, setDurationTick] = useState(0);
 
   // Metronome State
   const [bpm, setBpm] = useState(timerSettings.metronomeBpm);
@@ -40,12 +48,13 @@ export default function TimerScreen() {
   useEffect(() => {
     setupAudio();
     return () => {
+      stopWorkoutTimer();
       if (intervalRef.current) clearInterval(intervalRef.current);
       if (metronomeRef.current) clearInterval(metronomeRef.current);
       cleanupAudio();
       Speech.stop();
     };
-  }, []);
+  }, [stopWorkoutTimer]);
 
   const setupAudio = async () => {
     try {
@@ -171,6 +180,22 @@ export default function TimerScreen() {
     };
   }, [isMetronomeRunning, bpm, beats, playBeep]);
 
+  useEffect(() => {
+    if (isMetronomeRunning) {
+      startWorkoutTimer();
+    } else {
+      stopWorkoutTimer();
+    }
+  }, [isMetronomeRunning, startWorkoutTimer, stopWorkoutTimer]);
+
+  useEffect(() => {
+    if (!workoutTimerRunning) return;
+    const intervalId = setInterval(() => {
+      setDurationTick((tick) => tick + 1);
+    }, 1000);
+    return () => clearInterval(intervalId);
+  }, [workoutTimerRunning]);
+
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
@@ -257,6 +282,10 @@ export default function TimerScreen() {
         ]}
         style={styles.segmentedButtons}
       />
+
+      <Text style={styles.workoutDurationText}>
+        筋トレ時間 {formatTime(getSelectedWorkoutDurationSeconds())}
+      </Text>
 
       <Button
         mode="outlined"
@@ -550,6 +579,12 @@ const styles = StyleSheet.create({
   feedbackButton: {
     marginBottom: 16,
     alignSelf: 'center',
+  },
+  workoutDurationText: {
+    fontSize: 14,
+    color: darkTheme.colors.onSurfaceVariant,
+    alignSelf: 'center',
+    marginBottom: 8,
   },
   content: {
     flex: 1,

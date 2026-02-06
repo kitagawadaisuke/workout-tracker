@@ -38,6 +38,7 @@ export interface Exercise {
 export interface DailyWorkout {
   date: string; // YYYY-MM-DD
   exercises: Exercise[];
+  durationSeconds?: number;
 }
 
 // カスタム種目の定義
