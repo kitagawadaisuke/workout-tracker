@@ -1,6 +1,6 @@
-import { Tabs } from 'expo-router';
+﻿import { Tabs } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { darkTheme } from '@/constants/theme';
+import { colors, darkTheme } from '@/constants/theme';
 
 export default function TabLayout() {
   return (
@@ -14,16 +14,20 @@ export default function TabLayout() {
           backgroundColor: darkTheme.colors.surface,
           borderTopColor: darkTheme.colors.outline,
         },
-        tabBarActiveTintColor: darkTheme.colors.primary,
-        tabBarInactiveTintColor: darkTheme.colors.onSurfaceVariant,
+        tabBarActiveTintColor: darkTheme.colors.textPrimary,
+        tabBarInactiveTintColor: darkTheme.colors.textSecondary,
       }}
     >
       <Tabs.Screen
         name="index"
         options={{
           title: 'トレーニング',
-          tabBarIcon: ({ color, size }) => (
-            <MaterialCommunityIcons name="dumbbell" size={size} color={color} />
+          tabBarIcon: ({ focused, size }) => (
+            <MaterialCommunityIcons
+              name="dumbbell"
+              size={size}
+              color={focused ? colors.strength : darkTheme.colors.textSecondary}
+            />
           ),
         }}
       />
@@ -31,8 +35,12 @@ export default function TabLayout() {
         name="timer"
         options={{
           title: 'タイマー',
-          tabBarIcon: ({ color, size }) => (
-            <MaterialCommunityIcons name="timer-outline" size={size} color={color} />
+          tabBarIcon: ({ focused, size }) => (
+            <MaterialCommunityIcons
+              name="timer-outline"
+              size={size}
+              color={focused ? darkTheme.colors.accent : darkTheme.colors.textSecondary}
+            />
           ),
         }}
       />
@@ -40,8 +48,12 @@ export default function TabLayout() {
         name="history"
         options={{
           title: '履歴',
-          tabBarIcon: ({ color, size }) => (
-            <MaterialCommunityIcons name="calendar-month" size={size} color={color} />
+          tabBarIcon: ({ focused, size }) => (
+            <MaterialCommunityIcons
+              name="calendar-month"
+              size={size}
+              color={focused ? darkTheme.colors.onSurfaceVariant : darkTheme.colors.textSecondary}
+            />
           ),
         }}
       />
@@ -49,8 +61,12 @@ export default function TabLayout() {
         name="settings"
         options={{
           title: '設定',
-          tabBarIcon: ({ color, size }) => (
-            <MaterialCommunityIcons name="cog-outline" size={size} color={color} />
+          tabBarIcon: ({ focused, size }) => (
+            <MaterialCommunityIcons
+              name="cog-outline"
+              size={size}
+              color={focused ? darkTheme.colors.onSurfaceVariant : darkTheme.colors.textSecondary}
+            />
           ),
         }}
       />

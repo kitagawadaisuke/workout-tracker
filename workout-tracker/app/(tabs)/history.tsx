@@ -1,10 +1,11 @@
 ﻿import React, { useState, useMemo } from 'react';
-import { View, ScrollView, StyleSheet, Alert } from 'react-native';
-import { Text, Card, Chip, Button } from 'react-native-paper';
+import { View, ScrollView, StyleSheet, Alert, Pressable } from 'react-native';
+import { Text, Card, Chip, Button, IconButton, Snackbar } from 'react-native-paper';
 import { Calendar, DateData } from 'react-native-calendars';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useWorkoutStore } from '@/stores/workoutStore';
-import { darkTheme, calendarTheme, colors } from '@/constants/theme';
+import { darkTheme, calendarTheme } from '@/constants/theme';
+import { getExerciseColorForType, getExerciseIconForType } from '@/utils/exerciseStyle';
 import { DailyWorkout, EXERCISE_NAMES, isDurationBasedExercise } from '@/types/workout';
 
 type MarkedDates = {
@@ -16,28 +17,42 @@ type MarkedDates = {
 };
 
 export default function HistoryScreen() {
-  const { getAllWorkouts, getWorkoutByDate, setSelectedDate: setStoreSelectedDate, copyLastWorkoutToSelectedDate } = useWorkoutStore();
+  const {
+    getAllWorkouts,
+    getWorkoutByDate,
+    setSelectedDate: setStoreSelectedDate,
+    copyLastWorkoutToSelectedDate,
+    removeExercise,
+    removeExercisesByIds,
+    clearRestIntervalSeconds,
+    clearWorkoutDurationSeconds,
+    clearMetronomeBpm,
+  } = useWorkoutStore();
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [snackbarVisible, setSnackbarVisible] = useState(false);
+  const [lastAddedExerciseIds, setLastAddedExerciseIds] = useState<string[]>([]);
+  const [clearSnackbarVisible, setClearSnackbarVisible] = useState(false);
+  const [clearSnackbarMessage, setClearSnackbarMessage] = useState('');
+  const [isSummaryEditing, setIsSummaryEditing] = useState(false);
 
   const workouts = getAllWorkouts();
+  const maxDots = 6;
 
   const markedDates = useMemo(() => {
     const marks: MarkedDates = {};
 
     workouts.forEach((workout) => {
-      const hasStrength = workout.exercises.some((e) => !isDurationBasedExercise(e.type));
-      const hasDuration = workout.exercises.some((e) => isDurationBasedExercise(e.type));
-
-      const dots: { key: string; color: string }[] = [];
-      if (hasStrength) {
-        dots.push({ key: 'strength', color: colors.strength });
-      }
-      if (hasDuration) {
-        dots.push({ key: 'duration', color: colors.duration || colors.cardio });
-      }
+      const colorSet = new Set<string>();
+      workout.exercises.forEach((exercise) => {
+        colorSet.add(getExerciseColorForType(exercise.type));
+      });
+      const colors = Array.from(colorSet);
+      const dots = colors.slice(0, maxDots).map((color, index) => ({ key: `c-${index}`, color }));
+      const moreCount = Math.max(0, colors.length - maxDots);
 
       marks[workout.date] = {
         dots,
+        moreCount: moreCount > 0 ? moreCount : undefined,
       };
     });
 
@@ -45,7 +60,7 @@ export default function HistoryScreen() {
       marks[selectedDate] = {
         ...marks[selectedDate],
         selected: true,
-        selectedColor: darkTheme.colors.primary,
+        selectedColor: darkTheme.colors.surfaceVariant,
       };
     }
 
@@ -53,22 +68,6 @@ export default function HistoryScreen() {
   }, [workouts, selectedDate]);
 
   const selectedWorkout = selectedDate ? getWorkoutByDate(selectedDate) : null;
-
-  const currentYM = new Date().toISOString().slice(0, 7);
-  const statsYM = selectedDate ? selectedDate.slice(0, 7) : currentYM;
-
-  const sumWorkoutTimerSeconds = (ws: DailyWorkout[]) =>
-    ws.reduce((sum, w) => sum + (w.durationSeconds || 0), 0);
-
-  const monthWorkouts = useMemo(
-    () => workouts.filter((w) => w.date.startsWith(statsYM)),
-    [workouts, statsYM]
-  );
-
-  const monthTotalSeconds = useMemo(
-    () => sumWorkoutTimerSeconds(monthWorkouts),
-    [monthWorkouts]
-  );
 
   const formatDuration = (seconds: number) => {
     const totalSeconds = Math.max(0, Math.floor(seconds));
@@ -79,6 +78,13 @@ export default function HistoryScreen() {
       return `${hours}時間${mins}分${secs > 0 ? ` ${secs}秒` : ''}`;
     }
     return `${mins}分${secs > 0 ? ` ${secs}秒` : ''}`;
+  };
+
+  const formatMinSec = (seconds: number) => {
+    const totalSeconds = Math.max(0, Math.floor(seconds));
+    const mins = Math.floor(totalSeconds / 60);
+    const secs = totalSeconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
   const getTotalReps = (workout: DailyWorkout, type: string) => {
@@ -93,16 +99,56 @@ export default function HistoryScreen() {
       .reduce((sum, e) => sum + e.sets.length, 0);
   };
 
-  const getExerciseColor = (type: string) => {
-    return colors[type as keyof typeof colors] || colors.strength;
-  };
-
   return (
     <View style={styles.container}>
       <Calendar
         theme={calendarTheme}
         markingType="multi-dot"
         markedDates={markedDates}
+
+        dayComponent={({ date, state, marking }) => {
+          const dots = marking?.dots ?? [];
+          const moreCount = marking?.moreCount ?? 0;
+          const isSelected = !!marking?.selected;
+          const dateKey = date?.dateString ?? '';
+          return (
+            <Pressable
+              style={styles.dayCell}
+              onPress={() => {
+                if (!dateKey) return;
+                console.log('pressed', dateKey);
+                setSelectedDate(dateKey);
+                setStoreSelectedDate(dateKey);
+                console.log('selectedDate', dateKey);
+              }}
+            >
+              <View
+                style={[
+                  styles.dayNumberContainer,
+                  isSelected && { backgroundColor: marking?.selectedColor || darkTheme.colors.surfaceVariant },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.dayNumber,
+                    state === 'disabled' && { color: darkTheme.colors.onSurfaceVariant },
+                    isSelected && { color: darkTheme.colors.onSurface },
+                  ]}
+                >
+                  {date?.day}
+                </Text>
+              </View>
+              <View style={styles.dotRow} pointerEvents="none">
+                {dots.map((dot) => (
+                  <View key={dot.key} style={[styles.dot, { backgroundColor: dot.color }]} />
+                ))}
+                {moreCount > 0 && (
+                  <Text style={styles.moreBadge}>+{moreCount}</Text>
+                )}
+              </View>
+            </Pressable>
+          );
+        }}
         onDayPress={(day: DateData) => {
           setSelectedDate(day.dateString);
           setStoreSelectedDate(day.dateString);
@@ -110,14 +156,6 @@ export default function HistoryScreen() {
         enableSwipeMonths
         style={styles.calendar}
       />
-
-      <Card style={styles.statsCard}>
-        <Card.Content>
-          <Text style={styles.statsTitle}>今月の統計</Text>
-          <Text style={styles.statsLabel}>合計時間</Text>
-          <Text style={styles.statsValue}>{formatDuration(monthTotalSeconds)}</Text>
-        </Card.Content>
-      </Card>
 
       <ScrollView style={styles.detailsContainer}>
         {selectedDate && (
@@ -133,17 +171,18 @@ export default function HistoryScreen() {
             <Button
               mode="outlined"
               onPress={() => {
-                const copied = copyLastWorkoutToSelectedDate('append');
-                if (copied) {
-                  Alert.alert('コピー完了', '前回のトレーニングを追加しました。');
+                const addedIds = copyLastWorkoutToSelectedDate('append');
+                if (addedIds && addedIds.length > 0) {
+                  setLastAddedExerciseIds(addedIds);
+                  setSnackbarVisible(true);
                 } else {
-                  Alert.alert('コピーできません', 'コピー元のトレーニングが見つかりません。');
+                  Alert.alert('追加できません', '追加元のトレーニングが見つかりません。');
                 }
               }}
               style={styles.copyButton}
               compact
             >
-              前回の内容をコピー
+              前回と同じ内容を記録
             </Button>
           </>
         )}
@@ -151,18 +190,37 @@ export default function HistoryScreen() {
         {selectedWorkout ? (
           <>
             {selectedWorkout.exercises.map((exercise) => (
-              <Card key={exercise.id} style={styles.exerciseCard}>
+              <Card
+                key={exercise.id}
+                style={[styles.exerciseCard, { borderLeftColor: getExerciseColorForType(exercise.type) }]}
+              >
                 <Card.Content>
                   <View style={styles.exerciseHeader}>
                     <MaterialCommunityIcons
-                      name={exercise.type === 'cardio' ? 'run' : 'arm-flex'}
+                      name={getExerciseIconForType(exercise.type) as any}
                       size={20}
-                      color={getExerciseColor(exercise.type)}
+                      color={getExerciseColorForType(exercise.type)}
                     />
                     <Text style={styles.exerciseName}>{exercise.name}</Text>
+                    <IconButton
+                      icon="trash-can-outline"
+                      size={18}
+                      onPress={() => {
+                        Alert.alert(
+                          'このトレーニングを削除しますか？',
+                          '',
+                          [
+                            { text: 'キャンセル', style: 'cancel' },
+                            { text: '削除', style: 'destructive', onPress: () => removeExercise(exercise.id) },
+                          ]
+                        );
+                      }}
+                      iconColor={darkTheme.colors.onSurfaceVariant}
+                      style={styles.exerciseDeleteButton}
+                    />
                   </View>
 
-                  {isDurationBasedExercise(exercise.type) ? (
+                  {(isDurationBasedExercise(exercise.type) || exercise.duration !== undefined) ? (
                     <Text style={styles.statText}>
                       {formatDuration(exercise.duration || 0)}
                     </Text>
@@ -200,7 +258,17 @@ export default function HistoryScreen() {
 
             <Card style={styles.summaryCard}>
               <Card.Content>
-                <Text style={styles.summaryTitle}>サマリー</Text>
+                <View style={styles.summaryHeaderRow}>
+                  <Text style={styles.summaryTitle}>今日の統計</Text>
+                  <Button
+                    mode="text"
+                    onPress={() => setIsSummaryEditing((value) => !value)}
+                    compact
+                    textColor={darkTheme.colors.onSurfaceVariant}
+                  >
+                    {isSummaryEditing ? '完了' : '編集'}
+                  </Button>
+                </View>
                 {['pushup', 'squat', 'pullup'].map((type) => {
                   const totalReps = getTotalReps(selectedWorkout, type);
                   const totalSets = getTotalSets(selectedWorkout, type);
@@ -217,7 +285,7 @@ export default function HistoryScreen() {
                   );
                 })}
                 {selectedWorkout.exercises
-                  .filter((e) => isDurationBasedExercise(e.type))
+                  .filter((e) => isDurationBasedExercise(e.type) || e.duration !== undefined)
                   .map((e) => (
                     <View key={e.id} style={styles.summaryRow}>
                       <Text style={styles.summaryLabel}>{e.name}</Text>
@@ -226,12 +294,108 @@ export default function HistoryScreen() {
                       </Text>
                     </View>
                   ))}
-                <View style={styles.summaryRow}>
-                  <Text style={styles.summaryLabel}>合計時間</Text>
-                  <Text style={styles.summaryValue}>
-                    {formatDuration(selectedWorkout.durationSeconds || 0)}
-                  </Text>
-                </View>
+                {selectedWorkout.durationSeconds !== undefined && (
+                  <View style={styles.summaryRow}>
+                    <Text style={styles.summaryLabel}>筋トレ時間</Text>
+                    <View style={styles.summaryValueContainer}>
+                      <Text style={styles.summaryValue}>
+                        {formatDuration(selectedWorkout.durationSeconds)}
+                      </Text>
+                      {isSummaryEditing && (
+                        <IconButton
+                          icon="close"
+                          size={18}
+                          onPress={() => {
+                            if (!selectedDate) return;
+                            Alert.alert('筋トレ時間をクリアしますか？', '', [
+                              { text: 'キャンセル', style: 'cancel' },
+                              {
+                                text: 'クリア',
+                                style: 'destructive',
+                                onPress: () => {
+                                  clearWorkoutDurationSeconds(selectedDate);
+                                  setClearSnackbarMessage('クリアしました');
+                                  setClearSnackbarVisible(true);
+                                },
+                              },
+                            ]);
+                          }}
+                          iconColor={darkTheme.colors.onSurfaceVariant}
+                          style={styles.summaryClearIcon}
+                        />
+                      )}
+                    </View>
+                  </View>
+                )}
+                {selectedWorkout.restIntervalSeconds !== undefined && (
+                  <View style={styles.summaryRow}>
+                    <Text style={styles.summaryLabel}>セット間休憩</Text>
+                    <View style={styles.summaryValueContainer}>
+                      <Text style={styles.summaryValue}>
+                        {formatMinSec(selectedWorkout.restIntervalSeconds)}
+                      </Text>
+                      {isSummaryEditing && (
+                        <IconButton
+                          icon="close"
+                          size={18}
+                          onPress={() => {
+                            if (!selectedDate) return;
+                            Alert.alert('セット間休憩をクリアしますか？', '', [
+                              { text: 'キャンセル', style: 'cancel' },
+                              {
+                                text: 'クリア',
+                                style: 'destructive',
+                                onPress: () => {
+                                  clearRestIntervalSeconds(selectedDate);
+                                  setClearSnackbarMessage('クリアしました');
+                                  setClearSnackbarVisible(true);
+                                },
+                              },
+                            ]);
+                          }}
+                          iconColor={darkTheme.colors.onSurfaceVariant}
+                          style={styles.summaryClearIcon}
+                        />
+                      )}
+                    </View>
+                  </View>
+                )}
+                {selectedWorkout.metronomeBpm !== undefined && (
+                  <View style={styles.summaryRow}>
+                    <Text style={styles.summaryLabel}>BPM</Text>
+                    <View style={styles.summaryValueContainer}>
+                      <Text style={styles.summaryValue}>
+                        {selectedWorkout.metronomeBpm}
+                        {selectedWorkout.metronomeBeatsPerBar
+                          ? `（${selectedWorkout.metronomeBeatsPerBar}拍子）`
+                          : ''}
+                      </Text>
+                      {isSummaryEditing && (
+                        <IconButton
+                          icon="close"
+                          size={18}
+                          onPress={() => {
+                            if (!selectedDate) return;
+                            Alert.alert('BPMをクリアしますか？', '', [
+                              { text: 'キャンセル', style: 'cancel' },
+                              {
+                                text: 'クリア',
+                                style: 'destructive',
+                                onPress: () => {
+                                  clearMetronomeBpm(selectedDate);
+                                  setClearSnackbarMessage('クリアしました');
+                                  setClearSnackbarVisible(true);
+                                },
+                              },
+                            ]);
+                          }}
+                          iconColor={darkTheme.colors.onSurfaceVariant}
+                          style={styles.summaryClearIcon}
+                        />
+                      )}
+                    </View>
+                  </View>
+                )}
               </Card.Content>
             </Card>
           </>
@@ -259,6 +423,33 @@ export default function HistoryScreen() {
           </Card>
         )}
       </ScrollView>
+    <Snackbar
+      visible={snackbarVisible}
+      onDismiss={() => {
+        setSnackbarVisible(false);
+        setLastAddedExerciseIds([]);
+      }}
+      duration={30000}
+      action={{
+        label: '元に戻す',
+        onPress: () => {
+          if (selectedDate && lastAddedExerciseIds.length > 0) {
+            removeExercisesByIds(selectedDate, lastAddedExerciseIds);
+            setLastAddedExerciseIds([]);
+            setSnackbarVisible(false);
+          }
+        },
+      }}
+    >
+      前回のトレーニングを反映しました
+    </Snackbar>
+    <Snackbar
+      visible={clearSnackbarVisible}
+      onDismiss={() => setClearSnackbarVisible(false)}
+      duration={3000}
+    >
+      {clearSnackbarMessage}
+    </Snackbar>
     </View>
   );
 }
@@ -271,6 +462,38 @@ const styles = StyleSheet.create({
   calendar: {
     borderBottomWidth: 1,
     borderBottomColor: darkTheme.colors.outline,
+  },
+
+  dayCell: {
+    alignItems: 'center',
+  },
+  dayNumberContainer: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dayNumber: {
+    color: darkTheme.colors.onSurface,
+    fontSize: 13,
+  },
+  dotRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    marginTop: 2,
+    minHeight: 8,
+  },
+  dot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+  },
+  moreBadge: {
+    fontSize: 8,
+    color: darkTheme.colors.onSurfaceVariant,
+    marginLeft: 2,
   },
   detailsContainer: {
     flex: 1,
@@ -289,12 +512,17 @@ const styles = StyleSheet.create({
   exerciseCard: {
     backgroundColor: darkTheme.colors.surface,
     marginBottom: 12,
+    borderLeftWidth: 4,
   },
   exerciseHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     marginBottom: 12,
+  },
+  exerciseDeleteButton: {
+    marginLeft: 'auto',
+    margin: 0,
   },
   exerciseName: {
     fontSize: 16,
@@ -313,7 +541,7 @@ const styles = StyleSheet.create({
   },
   statText: {
     fontSize: 18,
-    color: darkTheme.colors.primary,
+    color: darkTheme.colors.onSurface,
     fontWeight: '600',
   },
   setsDetail: {
@@ -337,38 +565,35 @@ const styles = StyleSheet.create({
     color: darkTheme.colors.onSurface,
     marginBottom: 12,
   },
+  summaryHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
   summaryRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 8,
   },
   summaryLabel: {
-    color: darkTheme.colors.onSurfaceVariant,
+    flex: 1,
+    color: darkTheme.colors.textSecondary,
+  },
+  summaryValueContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 8,
   },
   summaryValue: {
-    color: darkTheme.colors.onSurface,
+    color: darkTheme.colors.textPrimary,
     fontWeight: '500',
   },
-  statsCard: {
-    backgroundColor: darkTheme.colors.surfaceVariant,
-    marginTop: 8,
-    marginHorizontal: 16,
-  },
-  statsTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: darkTheme.colors.onSurface,
-    marginBottom: 8,
-  },
-  statsLabel: {
-    fontSize: 12,
-    color: darkTheme.colors.onSurfaceVariant,
-    marginBottom: 4,
-  },
-  statsValue: {
-    fontSize: 20,
-    color: darkTheme.colors.onSurface,
-    fontWeight: '600',
+  summaryClearIcon: {
+    width: 32,
+    height: 32,
+    margin: 0,
   },
   emptyCard: {
     backgroundColor: darkTheme.colors.surface,

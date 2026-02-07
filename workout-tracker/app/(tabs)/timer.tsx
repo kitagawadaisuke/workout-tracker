@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+﻿import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { View, ScrollView, StyleSheet, Vibration, Alert } from 'react-native';
-import { Text, Button, SegmentedButtons, Card, IconButton, TextInput } from 'react-native-paper';
+import { Text, Button, SegmentedButtons, Card, IconButton, TextInput, Snackbar } from 'react-native-paper';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
 import * as Speech from 'expo-speech';
 import { useWorkoutStore } from '@/stores/workoutStore';
@@ -15,6 +16,8 @@ export default function TimerScreen() {
     pauseWorkoutTimer,
     recordWorkoutTimer,
     resetWorkoutTimer,
+    setRestIntervalSeconds,
+    setMetronomeBpm,
     workoutTimerRunning,
     getSelectedWorkoutDurationSeconds,
   } = useWorkoutStore();
@@ -28,6 +31,10 @@ export default function TimerScreen() {
   const [customMinutes, setCustomMinutes] = useState('');
   const [customSeconds, setCustomSeconds] = useState('');
   const [, setDurationTick] = useState(0);
+  const [restIntervalSnackbarVisible, setRestIntervalSnackbarVisible] = useState(false);
+  const [restIntervalMessage, setRestIntervalMessage] = useState('');
+  const [bpmSnackbarVisible, setBpmSnackbarVisible] = useState(false);
+  const [bpmMessage, setBpmMessage] = useState('');
 
   // Metronome State
   const [bpm, setBpm] = useState(timerSettings.metronomeBpm);
@@ -36,6 +43,7 @@ export default function TimerScreen() {
   const [currentBeat, setCurrentBeat] = useState(0);
   const [barCount, setBarCount] = useState(0);
   const metronomeRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const bpmHoldRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Feedback mode
   const [feedbackMode, setFeedbackMode] = useState<FeedbackMode>(timerSettings.feedbackMode || 'both');
@@ -45,7 +53,7 @@ export default function TimerScreen() {
   const clickSoundRef = useRef<Audio.Sound | null>(null);
   const accentSoundRef = useRef<Audio.Sound | null>(null);
 
-  const intervalOptions = [30, 45, 60, 90, 120, 180, 300];
+  const intervalOptions = [30, 60, 90];
 
   useEffect(() => {
     setupAudio();
@@ -105,6 +113,7 @@ export default function TimerScreen() {
       }
     }
   }, [feedbackMode]);
+  
 
   const playTimerEnd = useCallback(async () => {
     const shouldVibrate = feedbackMode === 'vibration' || feedbackMode === 'both';
@@ -164,8 +173,11 @@ export default function TimerScreen() {
           playBeep(isAccent);
 
           if (nextBeat === 0) {
-            setBarCount((prevBars) => prevBars + 1);
-            Speech.speak('1');
+            setBarCount((prevBars) => {
+              const nextBars = prevBars + 1;
+              Speech.speak(String(nextBars));
+              return nextBars;
+            });
           }
 
           return nextBeat;
@@ -193,6 +205,18 @@ export default function TimerScreen() {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const recordRestInterval = () => {
+    setRestIntervalSeconds(intervalTime);
+    setRestIntervalMessage(`セット間休憩（目安）を ${formatTime(intervalTime)} で記録しました`);
+    setRestIntervalSnackbarVisible(true);
+  };
+
+  const recordMetronomeBpm = () => {
+    setMetronomeBpm(bpm);
+    setBpmMessage(`BPMを ${bpm} で記録しました`);
+    setBpmSnackbarVisible(true);
   };
 
   const startInterval = () => {
@@ -228,34 +252,33 @@ export default function TimerScreen() {
     updateTimerSettings({ metronomeBpm: newBpm });
   };
 
-  const toggleBeats = () => {
-    const newBeats: 4 | 8 = beats === 4 ? 8 : 4;
-    setBeats(newBeats);
-    updateTimerSettings({ metronomeBeats: newBeats });
+  const startBpmHold = (delta: number) => {
+    if (bpmHoldRef.current) return;
+    bpmHoldRef.current = setInterval(() => {
+      adjustBpm(delta);
+    }, 120);
+  };
+
+  const stopBpmHold = () => {
+    if (!bpmHoldRef.current) return;
+    clearInterval(bpmHoldRef.current);
+    bpmHoldRef.current = null;
+  };
+
+  const setBeatsPerBar = (value: 4 | 8) => {
+    setBeats(value);
+    updateTimerSettings({ metronomeBeats: value });
   };
 
   const resetBarCount = () => {
     setBarCount(0);
   };
 
-  const cycleFeedbackMode = () => {
-    const modes: FeedbackMode[] = ['both', 'vibration', 'sound'];
-    const currentIndex = modes.indexOf(feedbackMode);
-    const newMode = modes[(currentIndex + 1) % modes.length];
+
+  const toggleSoundMode = () => {
+    const newMode: FeedbackMode = feedbackMode === 'sound' ? 'both' : 'sound';
     setFeedbackMode(newMode);
     updateTimerSettings({ feedbackMode: newMode });
-  };
-
-  const feedbackModeLabel: Record<FeedbackMode, string> = {
-    vibration: '振動のみ',
-    sound: '音のみ',
-    both: '振動+音',
-  };
-
-  const feedbackModeIcon: Record<FeedbackMode, string> = {
-    vibration: 'vibrate',
-    sound: 'volume-high',
-    both: 'bell-ring',
   };
 
   const isAccentBeat = (beatIndex: number) => {
@@ -264,10 +287,80 @@ export default function TimerScreen() {
     return false;
   };
 
+  const soundModeLabel = feedbackMode === 'sound' ? '音のみ' : '振動＋音';
+
   const workoutTimerTotalSeconds = getSelectedWorkoutDurationSeconds();
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.containerContent}>
+      <Card style={styles.workoutTimerCard}>
+        <Card.Content style={styles.workoutTimerContent}>
+          <Text style={styles.workoutTimerTitle}>筋トレタイマー</Text>
+          <Text style={styles.workoutTimerValue}>{formatTime(workoutTimerTotalSeconds)}</Text>
+
+          <View style={styles.workoutTimerActionsRow}>
+            <Button
+              mode="outlined"
+              icon="play"
+              onPress={startWorkoutTimer}
+              disabled={workoutTimerRunning}
+              style={[styles.workoutTimerButton, styles.outlineNeutral]}
+              contentStyle={styles.workoutTimerButtonContent}
+              textColor={darkTheme.colors.textSecondary}
+              compact
+            >
+              開始
+            </Button>
+            <Button
+              mode="outlined"
+              icon="pause"
+              onPress={pauseWorkoutTimer}
+              disabled={!workoutTimerRunning}
+              style={[styles.workoutTimerButton, styles.outlineNeutral]}
+              contentStyle={styles.workoutTimerButtonContent}
+              textColor={darkTheme.colors.textSecondary}
+              compact
+            >
+              一時停止
+            </Button>
+            <Button
+              mode="outlined"
+              icon="restart"
+              onPress={() => {
+                Alert.alert(
+                  'リセット',
+                  '元に戻せません。リセットしますか？',
+                  [
+                    { text: 'キャンセル', style: 'cancel' },
+                    { text: 'リセット', style: 'destructive', onPress: resetWorkoutTimer },
+                  ]
+                );
+              }}
+              disabled={!workoutTimerRunning && workoutTimerTotalSeconds === 0}
+              style={[styles.workoutTimerButton, styles.outlineNeutral]}
+              contentStyle={styles.workoutTimerButtonContent}
+              textColor={darkTheme.colors.textSecondary}
+              compact
+            >
+              リセット
+            </Button>
+            <Button
+              mode="contained"
+              icon="check"
+              onPress={recordWorkoutTimer}
+              disabled={!workoutTimerRunning && workoutTimerTotalSeconds === 0}
+              style={styles.workoutTimerButton}
+              contentStyle={styles.workoutTimerButtonContent}
+              buttonColor={darkTheme.colors.accent}
+              textColor={darkTheme.colors.onPrimary}
+              compact
+            >
+              記録
+            </Button>
+          </View>
+        </Card.Content>
+      </Card>
+
       <SegmentedButtons
         value={mode}
         onValueChange={(value) => setMode(value as 'interval' | 'metronome')}
@@ -275,78 +368,15 @@ export default function TimerScreen() {
           { value: 'interval', label: 'インターバル' },
           { value: 'metronome', label: 'メトロノーム' },
         ]}
+        theme={{
+          colors: {
+            secondaryContainer: darkTheme.colors.surface,
+            onSecondaryContainer: darkTheme.colors.textPrimary,
+            outline: darkTheme.colors.outline,
+          },
+        }}
         style={styles.segmentedButtons}
       />
-
-      <Card style={styles.workoutTimerCard}>
-        <Card.Content style={styles.workoutTimerContent}>
-          <Text style={styles.workoutTimerTitle}>筋トレタイマー</Text>
-          <Text style={styles.workoutTimerValue}>
-            {formatTime(workoutTimerTotalSeconds)}
-          </Text>
-          <View style={styles.workoutTimerActions}>
-            <View style={styles.workoutTimerRow}>
-              <Button
-                mode="contained"
-                onPress={startWorkoutTimer}
-                disabled={workoutTimerRunning}
-                style={styles.workoutTimerButton}
-                compact
-              >
-                開始
-              </Button>
-              <Button
-                mode="outlined"
-                onPress={pauseWorkoutTimer}
-                disabled={!workoutTimerRunning}
-                style={styles.workoutTimerButton}
-                compact
-              >
-                一時停止
-              </Button>
-            </View>
-            <View style={styles.workoutTimerRow}>
-              <Button
-                mode="outlined"
-                onPress={() => {
-                  Alert.alert(
-                    'リセット',
-                    '元に戻せません。リセットしますか？',
-                    [
-                      { text: 'キャンセル', style: 'cancel' },
-                      { text: 'リセット', style: 'destructive', onPress: resetWorkoutTimer },
-                    ]
-                  );
-                }}
-                disabled={!workoutTimerRunning && workoutTimerTotalSeconds === 0}
-                style={styles.workoutTimerButton}
-                compact
-              >
-                リセット
-              </Button>
-              <Button
-                mode="contained"
-                onPress={recordWorkoutTimer}
-                disabled={!workoutTimerRunning && workoutTimerTotalSeconds === 0}
-                style={styles.workoutTimerButton}
-                compact
-              >
-                記録
-              </Button>
-            </View>
-          </View>
-        </Card.Content>
-      </Card>
-
-      <Button
-        mode="outlined"
-        icon={feedbackModeIcon[feedbackMode]}
-        onPress={cycleFeedbackMode}
-        style={styles.feedbackButton}
-        compact
-      >
-        {feedbackModeLabel[feedbackMode]}
-      </Button>
 
       {mode === 'interval' ? (
         <View style={styles.content}>
@@ -356,6 +386,14 @@ export default function TimerScreen() {
               <Text style={styles.timerLabel}>
                 {isRunning ? '残り時間' : '設定時間'}
               </Text>
+              <Button
+                mode="outlined"
+                onPress={recordRestInterval}
+                style={styles.recordRestButton}
+                compact
+              >
+              休憩を記録
+              </Button>
             </Card.Content>
           </Card>
 
@@ -367,6 +405,8 @@ export default function TimerScreen() {
                 style={styles.mainButton}
                 contentStyle={styles.mainButtonContent}
                 icon="play"
+                buttonColor={darkTheme.colors.surfaceVariant}
+                textColor={darkTheme.colors.textPrimary}
               >
                 スタート
               </Button>
@@ -377,6 +417,8 @@ export default function TimerScreen() {
                 style={[styles.mainButton, styles.stopButton]}
                 contentStyle={styles.mainButtonContent}
                 icon="stop"
+                buttonColor={darkTheme.colors.danger}
+                textColor={darkTheme.colors.onPrimary}
               >
                 ストップ
               </Button>
@@ -388,9 +430,13 @@ export default function TimerScreen() {
             {intervalOptions.map((seconds) => (
               <Button
                 key={seconds}
-                mode={intervalTime === seconds ? 'contained' : 'outlined'}
+                mode="outlined"
                 onPress={() => selectIntervalTime(seconds)}
-                style={styles.intervalButton}
+                style={[
+                  styles.intervalButton,
+                  intervalTime === seconds && styles.intervalButtonActive,
+                ]}
+                textColor={intervalTime === seconds ? darkTheme.colors.accent : darkTheme.colors.textSecondary}
                 compact
               >
                 {formatTime(seconds)}
@@ -440,6 +486,14 @@ export default function TimerScreen() {
               <Text style={styles.bpmDisplay}>{bpm}</Text>
               <Text style={styles.bpmLabel}>BPM</Text>
               <Text style={styles.barCountLabel}>小節数: {barCount}</Text>
+              <Button
+                mode="outlined"
+                onPress={recordMetronomeBpm}
+                style={styles.recordBpmButton}
+                compact
+              >
+                BPMを記録
+              </Button>
 
               <View style={styles.beatIndicators}>
                 {Array.from({ length: beats }).map((_, i) => (
@@ -457,50 +511,6 @@ export default function TimerScreen() {
             </Card.Content>
           </Card>
 
-          <View style={styles.bpmControls}>
-            <IconButton
-              icon="minus"
-              mode="contained"
-              onPress={() => adjustBpm(-5)}
-              size={32}
-            />
-            <IconButton
-              icon="minus"
-              mode="outlined"
-              onPress={() => adjustBpm(-1)}
-              size={24}
-            />
-            <IconButton
-              icon="plus"
-              mode="outlined"
-              onPress={() => adjustBpm(1)}
-              size={24}
-            />
-            <IconButton
-              icon="plus"
-              mode="contained"
-              onPress={() => adjustBpm(5)}
-              size={32}
-            />
-          </View>
-
-          <View style={styles.metronomeActions}>
-            <Button
-              mode="outlined"
-              onPress={toggleBeats}
-              style={styles.beatsButton}
-            >
-              {beats}拍子
-            </Button>
-            <Button
-              mode="outlined"
-              onPress={resetBarCount}
-              style={styles.resetButton}
-            >
-              リセット
-            </Button>
-          </View>
-
           <View style={styles.buttonRow}>
             <Button
               mode="contained"
@@ -508,12 +518,89 @@ export default function TimerScreen() {
               style={[styles.mainButton, isMetronomeRunning && styles.stopButton]}
               contentStyle={styles.mainButtonContent}
               icon={isMetronomeRunning ? 'stop' : 'play'}
+              buttonColor={isMetronomeRunning ? darkTheme.colors.danger : darkTheme.colors.surfaceVariant}
+              textColor={isMetronomeRunning ? darkTheme.colors.onPrimary : darkTheme.colors.textPrimary}
             >
               {isMetronomeRunning ? 'ストップ' : 'スタート'}
             </Button>
           </View>
+
+          <View style={styles.bpmControls}>
+            <IconButton
+              icon="minus"
+              mode="outlined"
+              onPress={() => adjustBpm(-1)}
+              onLongPress={() => startBpmHold(-1)}
+              onPressOut={stopBpmHold}
+              size={32}
+            />
+            <IconButton
+              icon="plus"
+              mode="outlined"
+              onPress={() => adjustBpm(1)}
+              onLongPress={() => startBpmHold(1)}
+              onPressOut={stopBpmHold}
+              size={32}
+            />
+          </View>
+
+          <View style={styles.soundModeRow}>
+            <Button
+              mode="outlined"
+              onPress={toggleSoundMode}
+              style={styles.soundModeButton}
+              textColor={darkTheme.colors.mutedText}
+              icon={({ size }) => (
+                <MaterialCommunityIcons
+                  name="volume-high"
+                  size={size}
+                  color={feedbackMode === 'sound' ? darkTheme.colors.secondaryAccent : darkTheme.colors.mutedText}
+                />
+              )}
+              compact
+            >
+              サウンド: {soundModeLabel}
+            </Button>
+          </View>
+
+          <SegmentedButtons
+            value={String(beats)}
+            onValueChange={(value) => setBeatsPerBar((value === '8' ? 8 : 4) as 4 | 8)}
+            buttons={[
+              { value: '4', label: '4拍子' },
+              { value: '8', label: '8拍子' },
+            ]}
+            style={styles.beatsSegmented}
+          />
+
+          <View style={styles.metronomeActions}>
+            <Button
+              mode="outlined"
+              onPress={resetBarCount}
+              style={styles.resetButton}
+              textColor={darkTheme.colors.textSecondary}
+              compact
+            >
+              リセット
+            </Button>
+          </View>
         </View>
       )}
+
+      <Snackbar
+        visible={restIntervalSnackbarVisible}
+        onDismiss={() => setRestIntervalSnackbarVisible(false)}
+        duration={4000}
+      >
+        {restIntervalMessage}
+      </Snackbar>
+      <Snackbar
+        visible={bpmSnackbarVisible}
+        onDismiss={() => setBpmSnackbarVisible(false)}
+        duration={4000}
+      >
+        {bpmMessage}
+      </Snackbar>
     </ScrollView>
   );
 }
@@ -654,15 +741,21 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   workoutTimerActions: {
-    gap: 8,
     width: '100%',
   },
-  workoutTimerRow: {
+  workoutTimerActionsRow: {
     flexDirection: 'row',
     gap: 8,
+    flexWrap: 'wrap',
   },
   workoutTimerButton: {
-    flex: 1,
+    flexGrow: 1,
+    flexBasis: '48%',
+    minWidth: 120,
+  },
+  workoutTimerButtonContent: {
+    paddingHorizontal: 16,
+    minHeight: 44,
   },
   content: {
     flex: 1,
@@ -684,7 +777,7 @@ const styles = StyleSheet.create({
   timerDisplay: {
     fontSize: 72,
     fontWeight: '200',
-    color: darkTheme.colors.primary,
+    color: darkTheme.colors.onSurface,
     fontVariant: ['tabular-nums'],
   },
   timerLabel: {
@@ -692,10 +785,18 @@ const styles = StyleSheet.create({
     color: darkTheme.colors.onSurfaceVariant,
     marginTop: 8,
   },
+  recordRestButton: {
+    marginTop: 12,
+    alignSelf: 'center',
+  },
+  recordBpmButton: {
+    marginTop: 12,
+    alignSelf: 'center',
+  },
   bpmDisplay: {
     fontSize: 80,
     fontWeight: '200',
-    color: darkTheme.colors.primary,
+    color: darkTheme.colors.onSurface,
   },
   bpmLabel: {
     fontSize: 18,
@@ -719,17 +820,17 @@ const styles = StyleSheet.create({
     backgroundColor: darkTheme.colors.surfaceVariant,
   },
   beatDotActive: {
-    backgroundColor: darkTheme.colors.primary,
+    backgroundColor: darkTheme.colors.textPrimary,
     transform: [{ scale: 1.3 }],
   },
   beatDotAccent: {
-    backgroundColor: darkTheme.colors.secondary,
+    backgroundColor: darkTheme.colors.textSecondary,
     width: 24,
     height: 24,
     borderRadius: 12,
   },
   beatDotAccentActive: {
-    backgroundColor: '#f59e0b',
+    backgroundColor: darkTheme.colors.textPrimary,
     transform: [{ scale: 1.4 }],
   },
   bpmControls: {
@@ -738,14 +839,20 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 16,
   },
+  soundModeRow: {
+    width: '100%',
+    marginBottom: 12,
+  },
+  soundModeButton: {
+    borderColor: darkTheme.colors.outline,
+  },
+  beatsSegmented: {
+    marginBottom: 12,
+  },
   metronomeActions: {
     flexDirection: 'row',
     gap: 8,
     marginBottom: 8,
-  },
-  beatsButton: {
-    marginBottom: 0,
-    flex: 1,
   },
   resetButton: {
     flex: 1,
@@ -757,13 +864,16 @@ const styles = StyleSheet.create({
   },
   mainButton: {
     flex: 1,
-    backgroundColor: darkTheme.colors.primary,
+    backgroundColor: darkTheme.colors.surfaceVariant,
+    borderWidth: 1,
+    borderColor: darkTheme.colors.outline,
   },
   mainButtonContent: {
     paddingVertical: 12,
   },
   stopButton: {
-    backgroundColor: darkTheme.colors.error,
+    backgroundColor: darkTheme.colors.danger,
+    borderColor: darkTheme.colors.danger,
   },
   sectionTitle: {
     fontSize: 16,
@@ -779,12 +889,20 @@ const styles = StyleSheet.create({
   },
   intervalButton: {
     minWidth: 70,
+    borderColor: darkTheme.colors.outline,
+  },
+  intervalButtonActive: {
+    borderColor: darkTheme.colors.accent,
+  },
+  outlineNeutral: {
+    borderColor: darkTheme.colors.outline,
   },
   customTimeRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     width: '100%',
+    justifyContent: 'center',
   },
   customTimeInput: {
     width: 70,
@@ -796,6 +914,6 @@ const styles = StyleSheet.create({
     color: darkTheme.colors.onSurface,
   },
   customTimeButton: {
-    marginLeft: 8,
+    marginLeft: 4,
   },
 });

@@ -1,12 +1,12 @@
-export type BuiltinExerciseType = 'pushup' | 'squat' | 'pullup' | 'cardio' | 'bodypump' | 'bodycombat' | 'leapfight';
+﻿export type BuiltinExerciseType = 'pushup' | 'squat' | 'pullup' | 'cardio' | 'bodypump' | 'bodycombat' | 'leapfight';
 export type ExerciseType = BuiltinExerciseType | string;
 
 export interface SetEntry {
   reps: number;
-  weight?: number; // 重量（kg）
-  variation?: string; // バリエーション名（例: ナロー, ワイド, ブルガリアン右など）
-  tempo?: string; // テンポ表記（例: "2-1-2"）
-  assistance?: boolean; // 懸垂の補助あり/なし
+  weight?: number;
+  variation?: string;
+  tempo?: string;
+  assistance?: boolean;
 }
 
 export interface MetronomeSettings {
@@ -22,16 +22,28 @@ export interface WorkoutSet {
   tempo?: string;
   assistance?: boolean;
   durationMinutes?: number;
-  metronome?: boolean | MetronomeSettings; // このセットでメトロノームを使うか
+  metronome?: boolean | MetronomeSettings;
+}
+
+export interface WorkoutColorSummary {
+  primary: string;
+  dots?: string[];
+}
+
+export interface ExerciseDefinition {
+  id: string;
+  name: string;
+  kind: 'strength' | 'cardio' | 'machine' | 'freeweight';
 }
 
 export interface Exercise {
   id: string;
   type: ExerciseType;
   name: string;
+  colorKey?: string;
   sets: WorkoutSet[];
   duration?: number; // seconds (for cardio)
-  durationMinutes?: number; // 分（有酸素やBODYPUMP用、30/45/60など）
+  durationMinutes?: number;
   createdAt: string;
 }
 
@@ -39,16 +51,20 @@ export interface DailyWorkout {
   date: string; // YYYY-MM-DD
   exercises: Exercise[];
   durationSeconds?: number;
+  restBetweenSetsSeconds?: number;
+  restIntervalSeconds?: number;
+  metronomeBpm?: number;
+  metronomeBeatsPerBar?: 4 | 8;
+  colorSummary?: WorkoutColorSummary;
 }
 
-// カスタム種目の定義
 export interface CustomExerciseType {
-  id: string; // ユニークID
+  id: string;
   name: string;
-  icon: string; // MaterialCommunityIcons名
-  color: string; // HEXカラー
-  hasWeight: boolean; // 重量入力を使うか
-  isDuration: boolean; // 時間ベースか
+  icon: string;
+  color: string;
+  hasWeight: boolean;
+  isDuration: boolean;
 }
 
 export type FeedbackMode = 'vibration' | 'sound' | 'both';
@@ -61,16 +77,15 @@ export interface TimerSettings {
 }
 
 export const BUILTIN_EXERCISE_NAMES: Record<BuiltinExerciseType, string> = {
-  pushup: '腕立て伏せ',
+  pushup: 'プッシュアップ',
   squat: 'スクワット',
   pullup: '懸垂',
-  cardio: '有酸素運動',
+  cardio: '有酸素',
   bodypump: 'ボディパンプ',
   bodycombat: 'ボディコンバット',
   leapfight: 'リープファイト',
 };
 
-// 後方互換のためにエイリアスを残す
 export const EXERCISE_NAMES = BUILTIN_EXERCISE_NAMES as Record<string, string>;
 
 export const BUILTIN_EXERCISE_ICONS: Record<BuiltinExerciseType, string> = {
@@ -85,15 +100,12 @@ export const BUILTIN_EXERCISE_ICONS: Record<BuiltinExerciseType, string> = {
 
 export const EXERCISE_ICONS = BUILTIN_EXERCISE_ICONS as Record<string, string>;
 
-// 時間ベースの種目かどうか
 export const isDurationBasedExercise = (type: ExerciseType): boolean => {
   return ['cardio', 'bodypump', 'bodycombat', 'leapfight'].includes(type);
 };
 
-// プリセット時間オプション（分）
 export const DURATION_PRESETS = [30, 45, 60];
 
-// アイコン候補リスト
 export const AVAILABLE_ICONS = [
   'dumbbell', 'arm-flex', 'human', 'human-handsup', 'run', 'boxing-glove',
   'karate', 'weight-lifter', 'yoga', 'bike', 'swim', 'walk',
@@ -101,10 +113,8 @@ export const AVAILABLE_ICONS = [
   'heart-pulse', 'fire', 'lightning-bolt', 'target', 'trophy',
 ];
 
-// カラー候補リスト
 export const AVAILABLE_COLORS = [
   '#3b82f6', '#22c55e', '#f59e0b', '#f472b6', '#a855f7',
   '#ef4444', '#14b8a6', '#6366f1', '#ec4899', '#06b6d4',
   '#f97316', '#84cc16', '#8b5cf6', '#e11d48', '#0ea5e9',
 ];
-
